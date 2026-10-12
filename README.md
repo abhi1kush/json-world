@@ -21,6 +21,24 @@ A fast, correct JSON viewer & editor: a CodeMirror 6 text editor on the left, an
 - **Faithful model** – key order is kept exactly as written, integer-like keys included (`{"b":1,"10":2}` is not reordered), and number text is kept as written (big integers don't lose precision).
 - Draggable splitter. On phones the panels stack vertically.
 
+## Tabs
+
+The app has three tabs: **Viewer**, **Convert** and **Compare**. The URL hash (`#convert`, `#compare`) selects one, and every tab keeps its state when you switch away.
+
+### Convert (Rust → WebAssembly)
+
+- Converts between JSON, YAML and XML in any direction (JSON↔YAML, JSON↔XML, and YAML↔XML through JSON). The converter is written in Rust (`converter/`, using serde_json with `preserve_order` + `arbitrary_precision`, yaml-rust2 and quick-xml) and compiled with wasm-pack. The WASM file is downloaded only when you first open the Convert tab.
+- Input and output panes with format pickers and a **Swap** button. Options: XML root name, how to handle invalid XML names, inferring numbers/booleans from XML, how to handle multi-document YAML, and indent.
+- Upload a file (the format is detected from its extension or content), download with the right extension, copy, and **Send to Viewer**. Errors show line and column.
+- The mapping rules (`@attr`, `#text`, repeated elements → arrays, root handling, namespaces, CDATA, empty elements, YAML schema, anchors, multi-docs, big ints) are documented in [`converter/CONVENTIONS.md`](converter/CONVENTIONS.md).
+
+### Compare
+
+- Two JSON inputs: paste, upload, or **Use viewer JSON**.
+- A semantic diff. Object key order is ignored by default (toggle to report reordering). Arrays are compared by index, or optionally matched by a key field such as `id`. Numbers are compared by exact value (`1` = `1.0` = `1e0`), and `null` is not treated the same as a missing key.
+- Side-by-side collapsible trees: added rows are green, removed red, changed amber. Paths with differences open automatically, collapsed nodes show a diff-count badge, and there's next/prev navigation, summary counts and an "only show differences" toggle.
+- A line-based **text diff** of the pretty-printed documents (keys sorted when key order is ignored), side by side with synced scrolling.
+
 ## Keyboard (tree focused)
 
 | Key | Action |
@@ -41,9 +59,11 @@ Right-click a node for the context menu, which has the same actions.
 ```bash
 npm install
 npm run dev      # dev server
-npm test         # Vitest unit tests (src/lib/json.test.ts)
+npm test         # Vitest: json model, diff, and WASM converter integration/property tests
+npm run test:rust   # Rust unit + proptest tests (converter/)
+npm run build:wasm  # rebuild converter/pkg (needs rustup target wasm32-unknown-unknown + wasm-pack)
 npm run build    # type-check + production build
-npm run deploy   # build and force-push dist/ (with .nojekyll) to gh-pages
+npm run deploy   # rebuild WASM if wasm-pack exists, build, force-push dist/ (with .nojekyll) to gh-pages
 ```
 
-All document logic lives in `src/lib/json.ts`: an order-preserving parser and serializer with line/column errors, plus pure path operations (get/set/insert/delete/move/rename/add), type conversion, sort, search, unique key naming and paste rules. None of it depends on the UI.
+All document logic lives in `src/lib/json.ts`: an order-preserving parser and serializer with line/column errors, plus pure path operations (get/set/insert/delete/move/rename/add), type conversion, sort, search, unique key naming and paste rules. None of it depends on the UI. The diff logic is in `src/lib/diff.ts`, and the generated WASM package `converter/pkg` is committed, so the site builds without Rust.

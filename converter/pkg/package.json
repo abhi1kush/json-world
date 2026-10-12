@@ -1,0 +1,21 @@
+{
+  "name": "converter",
+  "type": "module",
+  "description": "JSON/YAML/XML converter for json-world (WASM)",
+  "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abhi1kush/json-world"
+  },
+  "files": [
+    "converter_bg.wasm",
+    "converter.js",
+    "converter.d.ts"
+  ],
+  "main": "converter.js",
+  "types": "converter.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

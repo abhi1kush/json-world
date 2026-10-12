@@ -1,0 +1,27 @@
+[package]
+name = "converter"
+version = "0.1.0"
+edition = "2021"
+description = "JSON/YAML/XML converter for json-world (WASM)"
+license = "MIT"
+repository = "https://github.com/abhi1kush/json-world"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+serde = "1"
+serde_json = { version = "1", features = ["preserve_order", "arbitrary_precision"] }
+yaml-rust2 = "0.10"
+quick-xml = "0.37"
+
+[dev-dependencies]
+proptest = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
