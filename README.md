@@ -35,7 +35,8 @@ The app has four tabs: **Viewer**, **Convert**, **Compare** and **JSON → Java*
 ### Compare
 
 - Two JSON inputs: paste, upload, or **Use viewer JSON**.
-- A semantic diff. Object key order is ignored by default (toggle to report reordering). Arrays are compared by index, or optionally matched by a key field such as `id`. Numbers are compared by exact value (`1` = `1.0` = `1e0`), and `null` is not treated the same as a missing key.
+- **Arrays are sorted before comparing (default).** Both inputs are normalized bottom-up: arrays nested deeper are sorted first, then each array's elements are stably sorted by the canonical JSON string of the already-normalized element. In that string object keys are sorted by code point and numbers keep their exact text, so `10` sorts before `9`. Objects keep their own key order. Sorted arrays are compared by index, so element order isn't a difference. This applies to both the tree diff and the text diff (the text diff shows the sorted versions), and the summary shows an "Arrays sorted" note. Turn on **Check order differences** (off by default) to skip sorting and compare arrays by index, so reordered elements show up as differences. There is no match-by-key option in the UI. (`diff()` in `src/lib/diff.ts` still accepts `arrayKey` for programmatic use.)
+- A semantic diff. Object key order is ignored by default (toggle to report reordering). Numbers are compared by exact value (`1` = `1.0` = `1e0`), and `null` is not treated the same as a missing key.
 - Side-by-side collapsible trees: added rows are green, removed red, changed amber. Paths with differences open automatically, collapsed nodes show a diff-count badge, and there's next/prev navigation, summary counts and an "only show differences" toggle.
 - A line-based **text diff** of the pretty-printed documents (keys sorted when key order is ignored), side by side with synced scrolling.
 

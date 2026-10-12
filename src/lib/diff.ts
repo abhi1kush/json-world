@@ -162,3 +162,47 @@ export function sideBySide(chunks: { value: string; added?: boolean; removed?: b
   }
   return rows;
 }
+
+// ---------------------------------------------------------------- array sorting normalization
+/** Compare strings by Unicode code point (not UTF-16 code unit, not locale). */
+export function compareCodePoints(a: string, b: string): number {
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) {
+    const x = a.codePointAt(i)!, y = b.codePointAt(i)!;
+    if (x !== y) return x < y ? -1 : 1;
+    if (x > 0xffff) i++; // both are the same astral char: skip its low surrogate
+  }
+  return a.length === b.length ? 0 : a.length < b.length ? -1 : 1;
+}
+
+/** Canonical JSON string: object keys sorted by code point, no whitespace, exact number text. */
+export function canonicalString(n: JNode): string {
+  return normalizeInner(n, false).canon;
+}
+
+function normalizeInner(n: JNode, sortArrays: boolean): { node: JNode; canon: string } {
+  switch (n.t) {
+    case 'object': {
+      // children first (post-order)
+      const kids = n.entries.map(([k, v]) => ({ k, ...normalizeInner(v, sortArrays) }));
+      const canon = '{' + kids.slice().sort((a, b) => compareCodePoints(a.k, b.k)).map(c => JSON.stringify(c.k) + ':' + c.canon).join(',') + '}';
+      return { node: { t: 'object', entries: kids.map(c => [c.k, c.node]) }, canon };
+    }
+    case 'array': {
+      const kids = n.items.map(v => normalizeInner(v, sortArrays));
+      if (sortArrays) kids.sort((a, b) => compareCodePoints(a.canon, b.canon)); // Array.prototype.sort is stable
+      return { node: { t: 'array', items: kids.map(c => c.node) }, canon: '[' + kids.map(c => c.canon).join(',') + ']' };
+    }
+    default:
+      return { node: n, canon: stringify(n, 0) };
+  }
+}
+
+/**
+ * Sort every array bottom-up: children are normalized first (deepest arrays first), then each array's
+ * elements are stably sorted by the canonical string of the already-normalized element.
+ * Object key order is kept as-is.
+ */
+export function sortArraysDeep(n: JNode): JNode {
+  return normalizeInner(n, true).node;
+}

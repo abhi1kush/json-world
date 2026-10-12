@@ -88,3 +88,44 @@ describe('line diff', () => {
     expect(diffText(P('{"b":1,"a":2}'), { ignoreKeyOrder: false })).toBe('{\n  "b": 1,\n  "a": 2\n}');
   });
 });
+
+import { sortArraysDeep, canonicalString, compareCodePoints } from './diff';
+import { stringify } from './json';
+const S = (s: string) => stringify(sortArraysDeep(P(s)), 0);
+
+describe('sort arrays before compare', () => {
+  it('sorts bottom-up: inner sort changes the outer order', () => {
+    // Sorting the outer array first would compare "[2,5]" < "[9,1]" and keep this order;
+    // bottom-up sorts [9,1] -> [1,9] first, so "[1,9]" < "[2,5]" flips the outer order.
+    expect(S('[[2,5],[9,1]]')).toBe('[[1,9],[2,5]]');
+    expect(S('[[[3,0]],[[2,1]]]')).toBe('[[[0,3]],[[1,2]]]');
+    expect(S('{"x":[{"v":[9,1]},{"v":[2,5]}]}')).toBe('{"x":[{"v":[1,9]},{"v":[2,5]}]}');
+  });
+  it('objects with different key orders sort identically and keep their own key order', () => {
+    expect(S('[{"b":2,"a":1},{"a":0,"b":5}]')).toBe('[{"a":0,"b":5},{"b":2,"a":1}]');
+    expect(canonicalString(P('{"b":2,"a":1}'))).toBe('{"a":1,"b":2}');
+  });
+  it('mixed types and duplicates (stable)', () => {
+    expect(S('[true,"a",1,null,[0],{"k":1},-1,false,"a"]')).toBe('["a","a",-1,1,[0],false,null,true,{"k":1}]');
+    expect(S('[2,1,2,1]')).toBe('[1,1,2,2]');
+  });
+  it('lexicographic on canonical text: 10 before 9, exact number text kept', () => {
+    expect(S('[9,10,"9","10"]')).toBe('["10","9",10,9]');
+    expect(S('[1.50,1.5,1e2]')).toBe('[1.5,1.50,1e2]');
+  });
+  it('code point order, not locale / UTF-16', () => {
+    expect(S('["b","B","a","é","😀","\uffff"]')).toBe(JSON.stringify(['B', 'a', 'b', 'é', '\uffff', '😀']));
+    expect(compareCodePoints('😀', '\uffff')).toBe(1);
+  });
+  it('default (sorted): permuted inputs => 0 diffs; check-order (unsorted): order differences reported', () => {
+    const a = '{"users":[{"id":1,"tags":["x","y"]},{"id":2,"tags":["z"]}],"n":[3,1,2]}';
+    const b = '{"n":[2,3,1],"users":[{"tags":["z"],"id":2},{"tags":["y","x"],"id":1}]}';
+    expect(diff(sortArraysDeep(P(a)), sortArraysDeep(P(b))).count).toBe(0);
+    const unsorted = listDiffs(diff(P(a), P(b))).map(d => JSON.stringify(d.path));
+    expect(unsorted).toContain('["n",0]'); expect(unsorted.length).toBeGreaterThan(3);
+    expect(diff(sortArraysDeep(P('[1,2]')), sortArraysDeep(P('[2,3]'))).count).toBe(2);
+  });
+  it('does not mutate input', () => {
+    const n = P('[3,1]'); sortArraysDeep(n); expect(stringify(n, 0)).toBe('[3,1]');
+  });
+});
