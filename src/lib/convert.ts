@@ -1,13 +1,13 @@
 import { parse as parseJson } from './json';
 
 // Thin typed wrapper around the Rust/WASM converter. The WASM module is loaded lazily.
-export type Format = 'json' | 'yaml' | 'xml';
-export interface ConvertOptions { rootName?: string; invalidNames?: 'sanitize' | 'error'; inferTypes?: boolean; indent?: number; multiDoc?: 'array' | 'error' }
+export type Format = 'json' | 'yaml' | 'xml' | 'properties';
+export interface ConvertOptions { rootName?: string; invalidNames?: 'sanitize' | 'error'; inferTypes?: boolean; indent?: number; multiDoc?: 'array' | 'error'; escapeUnicode?: boolean }
 export type ConvertResult = { ok: true; output: string } | { ok: false; message: string; line: number | null; col: number | null };
 export type ConvertFn = (input: string, from: Format, to: Format, opts?: ConvertOptions) => ConvertResult;
 
-export const EXT: Record<Format, string> = { json: 'json', yaml: 'yaml', xml: 'xml' };
-export const MIME: Record<Format, string> = { json: 'application/json', yaml: 'application/yaml', xml: 'application/xml' };
+export const EXT: Record<Format, string> = { json: 'json', yaml: 'yaml', xml: 'xml', properties: 'properties' };
+export const MIME: Record<Format, string> = { json: 'application/json', yaml: 'application/yaml', xml: 'application/xml', properties: 'text/x-java-properties' };
 
 export function wrap(raw: (i: string, f: string, t: string, o: string) => string): ConvertFn {
   return (input, from, to, opts = {}) => JSON.parse(raw(input, from, to, JSON.stringify(opts))) as ConvertResult;
@@ -31,6 +31,7 @@ export function detectFormat(text: string, filename?: string): Format | null {
   if (ext === 'json') return 'json';
   if (ext === 'yaml' || ext === 'yml') return 'yaml';
   if (ext === 'xml') return 'xml';
+  if (ext === 'properties') return 'properties';
   const t = text.trimStart();
   if (t.startsWith('<')) return 'xml';
   if (t.startsWith('{') || t.startsWith('[')) return 'json';
@@ -38,7 +39,7 @@ export function detectFormat(text: string, filename?: string): Format | null {
 }
 
 // ---------------------------------------------------------------- error surfacing
-export const FORMAT_LABEL: Record<Format, string> = { json: 'JSON', yaml: 'YAML', xml: 'XML' };
+export const FORMAT_LABEL: Record<Format, string> = { json: 'JSON', yaml: 'YAML', xml: 'XML', properties: 'Properties' };
 
 /** A located problem. line/col are 1-based; from/to are document offsets for an editor mark (null when unknown). */
 export interface ConvDiag { title: string; message: string; line: number | null; col: number | null; from: number | null; to: number | null; stage: 'parse' | 'convert' }
@@ -74,7 +75,7 @@ function refine(input: string, from: Format, message: string, line: number | nul
 
 /** For path-only conversion errors (e.g. "Invalid XML name 'a b' at $.x"), find the key in the JSON source. */
 function findKey(input: string, message: string): [number, number] | null {
-  const m = /name '([^']*)'/.exec(message); if (!m) return null;
+  const m = /(?:name|Key) '([^']*)'/.exec(message); if (!m) return null;
   const i = input.indexOf(JSON.stringify(m[1]));
   if (i < 0) return null;
   const before = input.slice(0, i).split('\n');
@@ -108,7 +109,7 @@ export function runConvert(conv: ConvertFn, input: string, from: Format, to: For
     if (/top-level/.test(r.message)) { const i = input.search(/\S/); const b = input.slice(0, i).split('\n'); line = b.length; col = b[b.length - 1].length + 1; }
     else { const k = findKey(input, r.message); if (k) [line, col] = k; }
   }
-  const message = r.message.replace(/^JSON → XML: /, '');
+  const message = r.message.replace(/^JSON → (XML|Properties): /, '');
   return { kind: 'error', diag: { title: stage === 'parse' ? `Invalid ${F}` : `Can't convert ${F} → ${T}`, message, stage, ...locate(input, line, col) } };
 }
 

@@ -1,9 +1,10 @@
-//! JSON / YAML / XML converter used by json-world (compiled to WASM).
+//! JSON / YAML / XML / Java .properties converter used by json-world (compiled to WASM).
 //!
 //! Every conversion goes through `serde_json::Value` (key order preserved, numbers kept as
 //! their exact decimal text thanks to `arbitrary_precision`).
 //! See `CONVENTIONS.md` for the YAML and XML mapping rules.
 
+pub mod properties;
 pub mod xml;
 pub mod yaml;
 
@@ -41,10 +42,12 @@ pub struct Options {
     pub indent: usize,
     /// YAML->JSON with several documents: "array" (default) or "error".
     pub multi_doc: String,
+    /// JSON->properties: write non-ASCII as \uXXXX (default true, like Properties.store).
+    pub escape_unicode: bool,
 }
 impl Default for Options {
     fn default() -> Self {
-        Options { root_name: "root".into(), invalid_names: "sanitize".into(), infer_types: false, indent: 2, multi_doc: "array".into() }
+        Options { root_name: "root".into(), invalid_names: "sanitize".into(), infer_types: false, indent: 2, multi_doc: "array".into(), escape_unicode: true }
     }
 }
 impl Options {
@@ -55,6 +58,7 @@ impl Options {
             if let Some(Value::String(v)) = m.get("invalidNames") { o.invalid_names = v.clone(); }
             if let Some(Value::Bool(v)) = m.get("inferTypes") { o.infer_types = *v; }
             if let Some(Value::String(v)) = m.get("multiDoc") { o.multi_doc = v.clone(); }
+            if let Some(Value::Bool(v)) = m.get("escapeUnicode") { o.escape_unicode = *v; }
             if let Some(n) = m.get("indent").and_then(|v| v.as_u64()) { o.indent = (n as usize).min(8); }
         }
         o
@@ -82,6 +86,7 @@ pub fn parse(input: &str, from: &str, o: &Options) -> Result<Value, ConvError> {
         "json" => parse_json(input),
         "yaml" => yaml::parse_yaml(input, o),
         "xml" => xml::parse_xml(input, o),
+        "properties" => properties::parse_properties(input, o),
         f => Err(ConvError::new(format!("Unknown input format '{f}'"))),
     }
 }
@@ -90,6 +95,7 @@ pub fn emit(v: &Value, to: &str, o: &Options) -> Result<String, ConvError> {
         "json" => Ok(to_json(v, o.indent)),
         "yaml" => Ok(yaml::to_yaml(v)),
         "xml" => xml::to_xml(v, o),
+        "properties" => properties::to_properties(v, o),
         t => Err(ConvError::new(format!("Unknown output format '{t}'"))),
     }
 }

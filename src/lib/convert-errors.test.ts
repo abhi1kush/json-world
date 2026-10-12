@@ -6,7 +6,7 @@ import { wrap, ConvertFn, Format, runConvert, diagText, locate } from './convert
 
 let conv: ConvertFn;
 beforeAll(() => { initSync({ module: readFileSync(new URL('../../converter/pkg/converter_bg.wasm', import.meta.url)) }); conv = wrap(rawConvert); });
-const FORMATS: Format[] = ['json', 'yaml', 'xml'];
+const FORMATS: Format[] = ['json', 'yaml', 'xml', 'properties'];
 const targets = (f: Format) => FORMATS.filter(t => t !== f);
 const err = (input: string, from: Format, to: Format) => {
   const r = runConvert(conv, input, from, to);
@@ -24,13 +24,17 @@ const CASES: [string, Format, string, number, number, RegExp][] = [
   ['XML unclosed tag', 'xml', '<r>\n  <a>x</a>\n  <b>', 3, 3, /Unclosed element <b>/],
   ['XML mismatched tags', 'xml', '<r>\n  <a>\n    <b/>\n</r>', 4, 1, /expected `<\/a>`/],
   ['XML invalid char', 'xml', '<a>\n ok \u0001</a>', 2, 5, /U\+0001/],
+  ['Properties conflict', 'properties', 'a=1\n  a.b=2', 2, 3, /Conflicting keys.*line 1, column 1/],
+  ['Properties array gap', 'properties', 'x[0]=1\nx[2]=3', 2, 1, /no element \[1\]/],
+  ['Properties bad \\u escape', 'properties', '# c\nk=\\u12G4', 2, 3, /uXXXX/],
+  ['Properties bad index', 'properties', 'ok=1\nlist[x]=1', 2, 1, /non-negative integer/],
 ];
 
 describe('runConvert errors', () => {
   for (const [name, f, input, line, col, re] of CASES) for (const t of targets(f)) it(`${name} (${f} → ${t})`, () => {
     const d = err(input, f, t);
     expect(d.stage).toBe('parse');
-    expect(d.title).toBe(`Invalid ${f.toUpperCase()}`);
+    expect(d.title).toBe(`Invalid ${f === 'properties' ? 'Properties' : f.toUpperCase()}`);
     expect([d.line, d.col]).toEqual([line, col]);
     expect(d.message).toMatch(re);
     expect(d.from).not.toBeNull();
@@ -55,6 +59,10 @@ describe('runConvert errors', () => {
   });
   it('YAML → XML of a scalar is a convert error, not "invalid YAML"', () => {
     const d = err('42', 'yaml', 'xml'); expect(d.stage).toBe('convert');
+  });
+  it('JSON → Properties: top-level scalar/array and dotted keys are located convert errors', () => {
+    let d = err('[1]', 'json', 'properties'); expect(d.stage).toBe('convert'); expect(d.message).toMatch(/top-level array/); expect([d.line, d.col]).toEqual([1, 1]);
+    d = err('{\n  "a": {\n    "b.c": 1\n  }\n}', 'json', 'properties'); expect(d.title).toBe("Can't convert JSON → Properties"); expect([d.line, d.col]).toEqual([3, 5]);
   });
   it('locate clamps out-of-range positions', () => {
     expect(locate('ab\ncd', 9, 9)).toEqual({ line: 2, col: 3, from: 4, to: 5 });

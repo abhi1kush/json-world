@@ -16,7 +16,7 @@ fn add_child(map: &mut Map<String, Value>, name: String, v: Value) {
     }
 }
 
-fn infer(s: String, o: &Options) -> Value {
+pub(crate) fn infer(s: String, o: &Options) -> Value {
     if o.infer_types {
         if s == "true" { return Value::Bool(true); }
         if s == "false" { return Value::Bool(false); }
