@@ -23,7 +23,7 @@ A fast, correct JSON viewer & editor: a CodeMirror 6 text editor on the left, an
 
 ## Tabs
 
-The app has three tabs: **Viewer**, **Convert** and **Compare**. The URL hash (`#convert`, `#compare`) selects one, and every tab keeps its state when you switch away.
+The app has four tabs: **Viewer**, **Convert**, **Compare** and **JSON → Java**. The URL hash (`#convert`, `#compare`, `#java`) selects one, and every tab keeps its state when you switch away.
 
 ### Convert (Rust → WebAssembly)
 
@@ -38,6 +38,17 @@ The app has three tabs: **Viewer**, **Convert** and **Compare**. The URL hash (`
 - A semantic diff. Object key order is ignored by default (toggle to report reordering). Arrays are compared by index, or optionally matched by a key field such as `id`. Numbers are compared by exact value (`1` = `1.0` = `1e0`), and `null` is not treated the same as a missing key.
 - Side-by-side collapsible trees: added rows are green, removed red, changed amber. Paths with differences open automatically, collapsed nodes show a diff-count badge, and there's next/prev navigation, summary counts and an "only show differences" toggle.
 - A line-based **text diff** of the pretty-printed documents (keys sorted when key order is ignored), side by side with synced scrolling.
+
+### JSON → Java
+
+Turns a JSON request into a Jackson-annotated Java value object, updating as you type.
+- **Structure:** one public top-level class (class name and optional package are configurable). Every nested object becomes a `public static class` inside it. Array element classes get singular names (`items` → `Item`, `categories` → `Category`, `people` → `Person`). Name clashes are resolved (`User`, `User2`), JDK names aren't shadowed, and identical shapes can share one class (option).
+- **Field names:** private fields with `@JsonProperty("originalKey")`, named in camelCase. snake/kebab/space keys are converted, a leading digit gets a `field` prefix (`1st` → `field1st`), Java keywords get a `Value` suffix (`class` → `classValue`), and names that collide after cleanup get a number (`userName2`).
+- **Types:** `String`, `Boolean`, `Integer` → `Long` (outside int range) → `BigInteger` (outside long range), `Double` (or `BigDecimal`), `null` → `Object` unless another sample gives a type. `List<T>` gets its element type by merging all elements (mixed → `List<Object>`, empty → `List<Object>`, nested → `List<List<T>>`). Arrays of objects merge keys into one class, and keys missing from some elements become nullable fields. An empty object becomes `Map<String, Object>`. A top-level array generates the class from its merged element.
+- **Styles:** a plain class (getters/setters, no-arg + all-args constructors, optional toString/equals/hashCode), Lombok (`@Data @NoArgsConstructor @AllArgsConstructor`, optional `@Builder`), or Java records (nested records). Options: primitives (only for fields that are never null), BigDecimal, `@JsonIgnoreProperties(ignoreUnknown = true)`, `@JsonInclude(NON_NULL)`.
+- **Jackson naming fix:** when an accessor name would make Jackson see a different property than the field, e.g. `getAB()` → `ab`, the getter and setter get `@JsonProperty` in plain mode, and the class gets field-only `@JsonAutoDetect` in Lombok mode.
+- **Output:** copy, or download as `<ClassName>.java`.
+- **Verification:** `npm run verify:java` (`scripts/verify-java.sh`) generates code for the samples in `scripts/java-verify/samples` in 7 option sets (plain, Lombok, record). It compiles everything with a real `javac` against jackson-annotations/databind and Lombok downloaded from Maven Central, then round-trips each sample through `ObjectMapper` and compares the JSON trees. It is not run in CI.
 
 ## Keyboard (tree focused)
 
@@ -60,6 +71,7 @@ Right-click a node for the context menu, which has the same actions.
 npm install
 npm run dev      # dev server
 npm test         # Vitest: json model, diff, and WASM converter integration/property tests
+npm run verify:java # javac + Jackson round-trip check of generated Java (needs JDK 17+)
 npm run test:rust   # Rust unit + proptest tests (converter/)
 npm run build:wasm  # rebuild converter/pkg (needs rustup target wasm32-unknown-unknown + wasm-pack)
 npm run build    # type-check + production build

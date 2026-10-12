@@ -120,3 +120,5 @@ mark { background: #ffe066; color: inherit; border-radius: 2px; }
   .cmp-inputs { height: 50%; }
   .tabs button { padding: 6px 10px; }
 }
+.javatab { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.optbar label.dis { opacity: .45; }
