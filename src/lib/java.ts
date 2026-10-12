@@ -16,7 +16,7 @@ export interface JavaOptions {
   reuseClasses: boolean;
 }
 export const DEFAULT_JAVA_OPTIONS: JavaOptions = {
-  className: 'Request', packageName: '', mode: 'class', gettersSetters: true, constructors: true,
+  className: 'Request', packageName: '', mode: 'lombok', gettersSetters: false, constructors: true,
   toStringEqualsHashCode: false, lombokBuilder: false, primitives: false, bigDecimal: false,
   ignoreUnknown: false, includeNonNull: false, reuseClasses: true,
 };
