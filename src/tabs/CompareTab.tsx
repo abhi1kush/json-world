@@ -95,7 +95,7 @@ export default function CompareTab({ getViewerText }: { getViewerText: () => str
   const L = useParsed(leftText), R = useParsed(rightText);
   // By default arrays are sorted bottom-up before comparing (then compared by index);
   // 'Check order differences' skips sorting so array order changes are reported.
-  const opts: DiffOptions = useMemo(() => ({ ignoreKeyOrder: ignoreOrder }), [ignoreOrder]);
+  const opts: DiffOptions = useMemo(() => ({ ignoreKeyOrder: ignoreOrder, alignArrays: !checkOrder }), [ignoreOrder, checkOrder]);
   const [lastGood, setLastGood] = useState<{ a: J.JNode; b: J.JNode } | null>(null);
   const [rawGood, setRawGood] = useState<{ a: J.JNode; b: J.JNode } | null>(null);
   useEffect(() => { if (L.ok && R.ok) setRawGood({ a: L.node, b: R.node }); }, [L, R]);

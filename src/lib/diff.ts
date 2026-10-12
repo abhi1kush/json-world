@@ -1,4 +1,5 @@
 // Pure semantic JSON diff on the order-preserving JNode model.
+import { diffArrays } from 'diff';
 import { JNode, Seg, Path, isContainer, stringify, sortKeys } from './json';
 
 export type DiffKind = 'same' | 'added' | 'removed' | 'changed' | 'nested';
@@ -13,7 +14,12 @@ export interface DiffNode {
   /** Object key order differs (only reported when key order is not ignored). */
   orderChanged?: boolean;
 }
-export interface DiffOptions { ignoreKeyOrder?: boolean; arrayKey?: string }
+export interface DiffOptions {
+  ignoreKeyOrder?: boolean;
+  arrayKey?: string;
+  /** Align array elements with an LCS (Myers) diff over canonical element strings instead of by index. */
+  alignArrays?: boolean;
+}
 export interface DiffSummary { added: number; removed: number; changed: number; total: number }
 
 /** Canonical form of a JSON number text so 1, 1.0, 1e0 and 10e-1 compare equal, exactly (no float rounding). */
@@ -89,7 +95,11 @@ export function diff(a: JNode | undefined, b: JNode | undefined, o: DiffOptions 
       [...a.items, ...b.items].every(x => keyOf(x, key) !== undefined) &&
       new Set(a.items.map(x => keyOf(x, key))).size === a.items.length &&
       new Set(b.items.map(x => keyOf(x, key))).size === b.items.length;
-    if (keyed) {
+    if (o.alignArrays && !keyed) {
+      for (const p of alignItems(a.items, b.items)) {
+        children.push({ label: p.i ?? p.j!, leftSeg: p.i, rightSeg: p.j, node: diff(p.i === undefined ? undefined : a.items[p.i], p.j === undefined ? undefined : b.items[p.j], o) });
+      }
+    } else if (keyed) {
       const bi = new Map(b.items.map((x, i) => [keyOf(x, key!)!, i]));
       const seen = new Set<number>();
       a.items.forEach((x, i) => {
@@ -205,4 +215,56 @@ function normalizeInner(n: JNode, sortArrays: boolean): { node: JNode; canon: st
  */
 export function sortArraysDeep(n: JNode): JNode {
   return normalizeInner(n, true).node;
+}
+
+// ---------------------------------------------------------------- LCS array alignment
+/** Structural similarity used to pair unmatched elements inside one gap (0 = don't pair). */
+function similarity(x: JNode, y: JNode): number {
+  if (x.t !== y.t) return 0;
+  if (x.t === 'object' && y.t === 'object') {
+    const ks = new Set(x.entries.map(e => e[0]));
+    let shared = 0, sameVal = 0;
+    for (const [k, v] of y.entries) if (ks.has(k)) { shared++; const xv = x.entries.find(e => e[0] === k)![1]; if (xv.t === v.t && !isContainer(v) && equalPrim(xv, v)) sameVal++; }
+    return 1 + shared * 2 + sameVal;
+  }
+  return 1;
+}
+
+/**
+ * Align two arrays: equal elements (same canonical JSON) are matched with an LCS (Myers) diff;
+ * within each gap between matches, unmatched elements of the same type are paired greedily by
+ * similarity (shared keys / equal values) as "changed"; the rest are added / removed.
+ */
+export function alignItems(a: JNode[], b: JNode[]): { i?: number; j?: number }[] {
+  const ca = a.map(canonicalString), cb = b.map(canonicalString);
+  const chunks = diffArrays(ca, cb);
+  const out: { i?: number; j?: number }[] = [];
+  let i = 0, j = 0;
+  let gapL: number[] = [], gapR: number[] = [];
+  const flush = () => {
+    if (!gapL.length && !gapR.length) return;
+    const pairOf = new Map<number, number>();
+    const usedR = new Set<number>();
+    if (gapL.length * gapR.length <= 250_000) {
+      // greedy best-first over all candidate pairs (higher score, then closer position)
+      const cands: [number, number, number][] = [];
+      for (const l of gapL) for (const r of gapR) { const s = similarity(a[l], b[r]); if (s > 0) cands.push([s, l, r]); }
+      cands.sort((x, y) => y[0] - x[0] || Math.abs(x[1] - x[2]) - Math.abs(y[1] - y[2]) || x[1] - y[1]);
+      for (const [, l, r] of cands) if (!pairOf.has(l) && !usedR.has(r)) { pairOf.set(l, r); usedR.add(r); }
+    } else {
+      // very large gaps: pair in order by type
+      for (const l of gapL) { const r = gapR.find(r => !usedR.has(r) && a[l].t === b[r].t); if (r !== undefined) { pairOf.set(l, r); usedR.add(r); } }
+    }
+    for (const l of gapL) out.push(pairOf.has(l) ? { i: l, j: pairOf.get(l) } : { i: l });
+    for (const r of gapR) if (!usedR.has(r)) out.push({ j: r });
+    gapL = []; gapR = [];
+  };
+  for (const c of chunks) {
+    const n = c.count ?? c.value.length;
+    if (c.removed) for (let k = 0; k < n; k++) gapL.push(i++);
+    else if (c.added) for (let k = 0; k < n; k++) gapR.push(j++);
+    else { flush(); for (let k = 0; k < n; k++) out.push({ i: i++, j: j++ }); }
+  }
+  flush();
+  return out;
 }

@@ -129,3 +129,55 @@ describe('sort arrays before compare', () => {
     const n = P('[3,1]'); sortArraysDeep(n); expect(stringify(n, 0)).toBe('[3,1]');
   });
 });
+
+describe('LCS alignment of sorted arrays', () => {
+  const AL = { alignArrays: true };
+  const sd = (a: string, b: string) => diff(sortArraysDeep(P(a)), sortArraysDeep(P(b)), AL);
+  it('one inserted element => exactly 1 added, 0 changed', () => {
+    expect(summarize(sd('[1,2,3,4,5]', '[1,2,9,3,4,5]'))).toEqual({ added: 1, removed: 0, changed: 0, total: 1 });
+    expect(summarize(sd('[{"id":1},{"id":2},{"id":3}]', '[{"id":1},{"id":15},{"id":2},{"id":3}]'))).toEqual({ added: 1, removed: 0, changed: 0, total: 1 });
+  });
+  it('inserted object with no counterpart is a pure add', () => {
+    const d = sd('[{"id":1,"n":"a"},{"id":3,"n":"c"}]', '[{"id":1,"n":"a"},{"id":2,"n":"b"},{"id":3,"n":"c"}]');
+    expect(summarize(d)).toEqual({ added: 1, removed: 0, changed: 0, total: 1 });
+    expect(listDiffs(d)).toEqual([expect.objectContaining({ kind: 'added', path: [1] })]);
+  });
+  it('one removed element => 1 removed', () => {
+    expect(summarize(sd('["a","b","c","d"]', '["a","c","d"]'))).toEqual({ added: 0, removed: 1, changed: 0, total: 1 });
+  });
+  it('one modified element => 1 changed with nested detail', () => {
+    const d = sd('[{"id":1,"n":"a"},{"id":2,"n":"b"},{"id":3,"n":"c"}]', '[{"id":1,"n":"a"},{"id":2,"n":"B"},{"id":3,"n":"c"}]');
+    expect(summarize(d)).toEqual({ added: 0, removed: 0, changed: 1, total: 1 });
+    expect(listDiffs(d)).toEqual([expect.objectContaining({ kind: 'changed', path: [1, 'n'] })]);
+  });
+  it('combos: insert + remove + modify', () => {
+    const d = sd('[{"id":1,"v":1},{"id":2,"v":2},{"id":4,"v":4},"x",7]', '[{"id":1,"v":1},{"id":2,"v":20},{"id":4,"v":4},"y",8,true]');
+    // id2 modified (1 nested change), "x"->"y" paired (same type), 7->8 paired, true added
+    expect(summarize(d)).toEqual({ added: 1, removed: 0, changed: 3, total: 4 });
+  });
+  it('pairs by structural similarity within a gap', () => {
+    const d = diff(P('[{"a":1,"b":2},{"x":1,"y":2}]'), P('[{"x":1,"y":3},{"a":1,"b":5}]'), AL);
+    const pairs = d.children!.map(c => [c.leftSeg, c.rightSeg]);
+    expect(pairs).toEqual([[0, 1], [1, 0]]);
+    expect(summarize(d).changed).toBe(2);
+  });
+  it('different types in a gap are not paired', () => {
+    expect(summarize(diff(P('["a"]'), P('[{"k":1}]'), AL))).toEqual({ added: 1, removed: 1, changed: 0, total: 2 });
+  });
+  it('nested arrays are aligned too', () => {
+    expect(summarize(sd('{"g":[{"m":[1,2,3]}]}', '{"g":[{"m":[1,2,3,4]}]}'))).toEqual({ added: 1, removed: 0, changed: 0, total: 1 });
+  });
+  it('index mode (check order) is unchanged', () => {
+    expect(summarize(diff(P('[1,2,3]'), P('[9,1,2,3]')))).toEqual({ added: 1, removed: 0, changed: 3, total: 4 });
+  });
+  it('perf: 5k-element arrays', () => {
+    const a = Array.from({ length: 5000 }, (_, i) => ({ id: i, name: 'n' + i, tags: [i % 7, i % 3] }));
+    const b = a.filter((_, i) => i % 100 !== 0).map(x => (x.id % 250 === 1 ? { ...x, name: 'changed' } : x));
+    b.push({ id: 99999, name: 'new', tags: [] });
+    const t = performance.now();
+    const d = diff(sortArraysDeep(P(JSON.stringify(a))), sortArraysDeep(P(JSON.stringify(b))), AL);
+    const s = summarize(d);
+    expect(performance.now() - t).toBeLessThan(5000);
+    expect(s).toEqual({ added: 1, removed: 50, changed: 20, total: 71 });
+  });
+});
