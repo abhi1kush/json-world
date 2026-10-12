@@ -1,0 +1,1 @@
+{"user_name": "ada", "userName": "dup1", "user-name": "dup2", "first name": "Ada", "URL": "http://x", "HTTPStatus": 200, "aB": "acronym", "isActive": true, "active": false, "zip-code": "NW1", "_links": {"self_href": "/u/1"}, "ümlaut_key": "ü", "camelCaseKey": 1, "x": {"y_z": {"deep_key": "v"}}}

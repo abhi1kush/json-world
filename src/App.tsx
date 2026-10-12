@@ -3,10 +3,11 @@ import Viewer, { ViewerApi } from './Viewer';
 
 const ConvertTab = lazy(() => import('./tabs/ConvertTab'));
 const CompareTab = lazy(() => import('./tabs/CompareTab'));
+const JavaTab = lazy(() => import('./tabs/JavaTab'));
 
-export type TabId = 'viewer' | 'convert' | 'compare';
-const TABS: { id: TabId; label: string }[] = [{ id: 'viewer', label: 'Viewer' }, { id: 'convert', label: 'Convert' }, { id: 'compare', label: 'Compare' }];
-const fromHash = (): TabId => { const h = location.hash.replace('#', ''); return h === 'convert' || h === 'compare' ? h : 'viewer'; };
+export type TabId = 'viewer' | 'convert' | 'compare' | 'java';
+const TABS: { id: TabId; label: string }[] = [{ id: 'viewer', label: 'Viewer' }, { id: 'convert', label: 'Convert' }, { id: 'compare', label: 'Compare' }, { id: 'java', label: 'JSON → Java' }];
+const fromHash = (): TabId => { const h = location.hash.replace('#', ''); return h === 'convert' || h === 'compare' || h === 'java' ? h : 'viewer'; };
 
 export default function App() {
   const [tab, setTab] = useState<TabId>(fromHash);
@@ -32,6 +33,7 @@ export default function App() {
       <Suspense fallback={<div className="loading">Loading…</div>}>
         {visited.has('convert') ? <div className="tabpane" style={{ display: tab === 'convert' ? undefined : 'none' }}><ConvertTab onSendToViewer={sendToViewer} getViewerText={() => viewer.current?.getText() ?? ''} /></div> : null}
         {visited.has('compare') ? <div className="tabpane" style={{ display: tab === 'compare' ? undefined : 'none' }}><CompareTab getViewerText={() => viewer.current?.getText() ?? ''} /></div> : null}
+        {visited.has('java') ? <div className="tabpane" style={{ display: tab === 'java' ? undefined : 'none' }}><JavaTab getViewerText={() => viewer.current?.getText() ?? ''} /></div> : null}
       </Suspense>
     </div>
   );

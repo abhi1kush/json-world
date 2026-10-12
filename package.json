@@ -10,10 +10,12 @@
     "test": "vitest run",
     "deploy": "bash scripts/deploy.sh",
     "build:wasm": "cd converter && wasm-pack build --target web --release --out-dir pkg && rm -f pkg/.gitignore",
-    "test:rust": "cd converter && cargo test"
+    "test:rust": "cd converter && cargo test",
+    "verify:java": "bash scripts/verify-java.sh"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-java": "^6.0.2",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-xml": "^6.1.0",
     "@codemirror/lang-yaml": "^6.1.3",

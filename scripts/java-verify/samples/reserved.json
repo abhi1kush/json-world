@@ -1,0 +1,1 @@
+{"class": "c", "new": true, "default": 1, "int": 2, "1st": "first", "_": "underscore", "true": false, "enum": ["a"], "record": "r", "var": 3, "@type": "T", "$ref": "#/x", "data": {"value": 1}, "string": {"s": "x"}, "request": {"id": 5}, "list": [{"a": 1}], "public": {"static": {"void": null}}}

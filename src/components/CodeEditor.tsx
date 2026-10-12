@@ -6,11 +6,12 @@ import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, foldGutter 
 import { json } from '@codemirror/lang-json';
 import { yaml } from '@codemirror/lang-yaml';
 import { xml } from '@codemirror/lang-xml';
+import { java } from '@codemirror/lang-java';
 
 const External = Annotation.define<boolean>();
-const langOf = (l: string) => (l === 'yaml' ? yaml() : l === 'xml' ? xml() : json());
+const langOf = (l: string) => (l === 'yaml' ? yaml() : l === 'xml' ? xml() : l === 'java' ? java() : json());
 
-interface Props { value: string; onChange?: (v: string) => void; lang: 'json' | 'yaml' | 'xml'; readOnly?: boolean; testId?: string; errorLine?: number | null }
+interface Props { value: string; onChange?: (v: string) => void; lang: 'json' | 'yaml' | 'xml' | 'java'; readOnly?: boolean; testId?: string; errorLine?: number | null }
 
 /** Generic CodeMirror editor (own undo history) used by the Convert and Compare tabs. */
 export default function CodeEditor({ value, onChange, lang, readOnly, testId, errorLine }: Props) {
