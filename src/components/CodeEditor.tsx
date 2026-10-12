@@ -3,11 +3,12 @@ import { setDiagnostics, lintGutter } from '@codemirror/lint';
 import { EditorView, Decoration, keymap, lineNumbers, highlightActiveLine, drawSelection } from '@codemirror/view';
 import { EditorState, Compartment, Annotation, StateEffect, StateField } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
-import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, foldGutter } from '@codemirror/language';
+import { StreamLanguage, syntaxHighlighting, defaultHighlightStyle, bracketMatching, foldGutter } from '@codemirror/language';
 import { json } from '@codemirror/lang-json';
 import { yaml } from '@codemirror/lang-yaml';
 import { xml } from '@codemirror/lang-xml';
 import { java } from '@codemirror/lang-java';
+import { properties } from '@codemirror/legacy-modes/mode/properties';
 
 const External = Annotation.define<boolean>();
 /** Whole-line highlight for the error line (the lint underline alone is easy to miss). */
@@ -22,9 +23,9 @@ const errLineField = StateField.define({
   provide: f => EditorView.decorations.from(f),
 });
 export interface EditorDiag { from: number; to: number; message: string }
-const langOf = (l: string) => (l === 'yaml' ? yaml() : l === 'xml' ? xml() : l === 'java' ? java() : json());
+const langOf = (l: string) => (l === 'yaml' ? yaml() : l === 'xml' ? xml() : l === 'java' ? java() : l === 'properties' ? StreamLanguage.define(properties) : json());
 
-interface Props { value: string; onChange?: (v: string) => void; lang: 'json' | 'yaml' | 'xml' | 'java'; readOnly?: boolean; testId?: string; diagnostics?: EditorDiag[] | null }
+interface Props { value: string; onChange?: (v: string) => void; lang: 'json' | 'yaml' | 'xml' | 'java' | 'properties'; readOnly?: boolean; testId?: string; diagnostics?: EditorDiag[] | null }
 
 /** Generic CodeMirror editor (own undo history) used by the Convert and Compare tabs. */
 export default function CodeEditor({ value, onChange, lang, readOnly, testId, diagnostics }: Props) {

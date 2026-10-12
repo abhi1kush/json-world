@@ -35,8 +35,10 @@ The app has four tabs: **Viewer**, **Convert**, **Compare** and **JSON → Java*
 
 ### Convert (Rust → WebAssembly)
 
-- Converts between JSON, YAML and XML in any direction (JSON↔YAML, JSON↔XML, and YAML↔XML through JSON). The converter is written in Rust (`converter/`, using serde_json with `preserve_order` + `arbitrary_precision`, yaml-rust2 and quick-xml) and compiled with wasm-pack. The WASM file is downloaded only when you first open the Convert tab.
-- Input and output panes with format pickers and a **Swap** button. Options: XML root name, how to handle invalid XML names, inferring numbers/booleans from XML, how to handle multi-document YAML, and indent.
+- Converts between JSON, YAML, XML and Java `.properties` in any direction (every pair goes through JSON). The converter is written in Rust (`converter/`, using serde_json with `preserve_order` + `arbitrary_precision`, yaml-rust2 and quick-xml) and compiled with wasm-pack. The WASM file is downloaded only when you first open the Convert tab.
+- Input and output panes with format pickers and a **Swap** button. Options: XML root name, how to handle invalid XML names, inferring numbers/booleans from XML, how to handle multi-document YAML, indent, escaping non-ASCII as `\uXXXX` in `.properties` output, and inferring numbers/booleans from `.properties`.
+- `.properties` uses Spring Boot style keys (`a.b[0].c=…`) and `java.util.Properties` escaping; `npm run verify:properties` checks the output against a real JDK. Mapping rules are in `converter/CONVENTIONS.md`.
+- Invalid input shows a banner above the input with the line and column, a lint marker on the offending line, and the output dimmed as "showing last valid output".
 - Upload a file (the format is detected from its extension or content), download with the right extension, copy, and **Send to Viewer**. Errors show line and column.
 - The mapping rules (`@attr`, `#text`, repeated elements → arrays, root handling, namespaces, CDATA, empty elements, YAML schema, anchors, multi-docs, big ints) are documented in [`converter/CONVENTIONS.md`](converter/CONVENTIONS.md).
 

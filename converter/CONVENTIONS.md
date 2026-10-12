@@ -60,3 +60,22 @@ All conversions go through a JSON value. Key order is kept everywhere, and numbe
 - text sits only in `#text` next to attributes or children.
 
 Things that can't round-trip: `""` (comes back as `null`), single-item and empty arrays, nested arrays, and numbers without `inferTypes`. Property tests in `tests/props.rs` and `src/lib/convert.test.ts` check all of this.
+
+## Java .properties
+
+### JSON → Properties
+
+- The top level must be an object (a scalar or array is an error: a `.properties` file is a set of keys).
+- Nested keys are joined with `.`, and array elements use Spring Boot indexes: `{"a":{"b":[1,{"c":2}]}}` → `a.b[0]=1`, `a.b[1].c=2`. Nested arrays give `m[0][1]`.
+- Values are written as strings: numbers keep their exact text, booleans become `true`/`false`.
+- `null`, `{}` and `[]` are all written as `key=` (empty value). They can't be told apart when reading back, so they all come back as `""`.
+- Escaping follows `java.util.Properties.store`: `\` `=` `:` `#` `!` are backslash-escaped in keys and values, spaces are escaped everywhere in keys but only when leading in values, tab/newline/CR/form feed become `\t` `\n` `\r` `\f`, and other control characters become `\uXXXX`. With **Escape non-ASCII** (`escapeUnicode`, default on) every character above `~` is written as `\uXXXX` (UTF-16 surrogate pairs for emoji), so the file is pure ASCII and loads with `Properties.load(InputStream)`. With it off, the output is UTF-8 and needs `Properties.load(Reader)` (or Java 9+ resource bundles).
+- A JSON key containing `.`, `[` or `]`, or an empty key, is an error because it can't be represented unambiguously.
+
+### Properties → JSON
+
+- Parsing follows `Properties.load`: `#`/`!` comment lines, blank lines, continuation lines (odd number of trailing `\`, leading whitespace of the next line dropped), and `=`, `:` or whitespace as the key/value separator. `\t \n \r \f \uXXXX` escapes are decoded; any other `\c` is `c`. A malformed `\u` escape is an error (as in Java).
+- Keys are split on `.` and `[n]` and rebuilt into objects and arrays (key order = first appearance). Indexes must be contiguous from 0 and written without leading zeros.
+- Duplicate keys: the last one wins (as in Java).
+- Conflicts such as `a=1` together with `a.b=2`, or `a[0]` together with `a.x`, are errors reported at the later line and column, naming the earlier line.
+- Values are strings. With **Infer numbers/booleans** (`inferTypes`), `true`/`false` and JSON-number text become booleans and exact numbers (`007` stays a string). Empty values stay `""`.
