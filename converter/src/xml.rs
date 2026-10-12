@@ -5,7 +5,7 @@ use quick_xml::Reader;
 use serde_json::{Map, Value};
 
 // ---------------------------------------------------------------- XML -> JSON
-struct Elem { name: String, map: Map<String, Value>, text: String, has_text: bool }
+struct Elem { pos: u64, name: String, map: Map<String, Value>, text: String, has_text: bool }
 
 fn add_child(map: &mut Map<String, Value>, name: String, v: Value) {
     match map.get_mut(&name) {
@@ -46,6 +46,11 @@ fn finish_elem(e: Elem, o: &Options) -> Value {
 }
 
 pub fn parse_xml(input: &str, o: &Options) -> Result<Value, ConvError> {
+    // XML 1.0 Char production: reject characters that may never appear in a document.
+    if let Some((i, ch)) = input.char_indices().find(|&(_, c)| !matches!(c, '\t' | '\n' | '\r' | '\u{20}'..='\u{D7FF}' | '\u{E000}'..='\u{FFFD}' | '\u{10000}'..='\u{10FFFF}')) {
+        let (l, c) = line_col(input, i);
+        return Err(ConvError::at(format!("Invalid character U+{:04X} (not allowed in XML)", ch as u32), l, c));
+    }
     let mut r = Reader::from_str(input);
     r.config_mut().trim_text(false);
     r.config_mut().check_end_names = true;
@@ -55,17 +60,20 @@ pub fn parse_xml(input: &str, o: &Options) -> Result<Value, ConvError> {
         let (l, c) = line_col(input, pos.unwrap_or(r.buffer_position()) as usize);
         ConvError::at(msg, l, c)
     };
-    let start_elem = |r: &Reader<&[u8]>, e: &quick_xml::events::BytesStart| -> Result<Elem, ConvError> {
+    let start_elem = |r: &Reader<&[u8]>, e: &quick_xml::events::BytesStart, pos: u64| -> Result<Elem, ConvError> {
         let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+        if !valid_name(&name) { return Err(err(r, format!("Invalid element name '{name}'"), Some(pos + 1))); }
         let mut map = Map::new();
         for a in e.attributes() {
             let a = a.map_err(|x| err(r, format!("Invalid attribute: {x}"), None))?;
-            let k = format!("@{}", String::from_utf8_lossy(a.key.as_ref()));
+            let an = String::from_utf8_lossy(a.key.as_ref()).into_owned();
+            if !valid_name(&an) { return Err(err(r, format!("Invalid attribute name '{an}'"), Some(pos))); }
+            let k = format!("@{an}");
             let v = a.unescape_value().map_err(|x| err(r, format!("Invalid attribute value: {x}"), None))?.into_owned();
             if map.contains_key(&k) { return Err(err(r, format!("Duplicate attribute '{}'", &k[1..]), None)); }
             map.insert(k, Value::String(v));
         }
-        Ok(Elem { name, map, text: String::new(), has_text: false })
+        Ok(Elem { pos, name, map, text: String::new(), has_text: false })
     };
     loop {
         let before = r.buffer_position();
@@ -73,11 +81,11 @@ pub fn parse_xml(input: &str, o: &Options) -> Result<Value, ConvError> {
         match ev {
             Event::Start(e) => {
                 if stack.is_empty() && root.is_some() { return Err(err(&r, "Multiple root elements".into(), Some(before))); }
-                stack.push(start_elem(&r, &e)?);
+                stack.push(start_elem(&r, &e, before)?);
             }
             Event::Empty(e) => {
                 if stack.is_empty() && root.is_some() { return Err(err(&r, "Multiple root elements".into(), Some(before))); }
-                let el = start_elem(&r, &e)?;
+                let el = start_elem(&r, &e, before)?;
                 let name = el.name.clone();
                 let v = finish_elem(el, o);
                 match stack.last_mut() { Some(p) => add_child(&mut p.map, name, v), None => root = Some((name, v)) }
@@ -107,7 +115,7 @@ pub fn parse_xml(input: &str, o: &Options) -> Result<Value, ConvError> {
             _ => {} // declaration, comments, processing instructions, doctype
         }
     }
-    if !stack.is_empty() { return Err(err(&r, format!("Unclosed element <{}>", stack.last().unwrap().name), Some(input.len() as u64))); }
+    if let Some(open) = stack.last() { return Err(err(&r, format!("Unclosed element <{}>: missing </{}> before end of input", open.name, open.name), Some(open.pos))); }
     match root {
         Some((n, v)) => { let mut m = Map::new(); m.insert(n, v); Ok(Value::Object(m)) }
         None => Err(ConvError::at("No root element found", 1, 1)),
@@ -217,7 +225,11 @@ pub fn to_xml(v: &Value, o: &Options) -> Result<String, ConvError> {
             let wrapper = Value::Object([("item".to_string(), Value::Array(items.clone()))].into_iter().collect());
             write_elem(&o.root_name, if items.is_empty() { &Value::Null } else { &wrapper }, 0, o, &mut out, "$")?;
         }
-        other => write_elem(&o.root_name, other, 0, o, &mut out, "$")?,
+        Value::Object(_) => write_elem(&o.root_name, v, 0, o, &mut out, "$")?,
+        other => {
+            let kind = match other { Value::Null => "null", Value::Bool(_) => "boolean", Value::Number(_) => "number", _ => "string" };
+            return Err(ConvError::new(format!("JSON → XML: top-level {kind} can't become an XML document; XML needs a root element. Wrap it in an object, e.g. {{\"value\": …}}")));
+        }
     }
     Ok(out)
 }

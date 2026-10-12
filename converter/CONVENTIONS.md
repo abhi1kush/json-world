@@ -44,7 +44,7 @@ All conversions go through a JSON value. Key order is kept everywhere, and numbe
 
 ### JSON → XML
 
-- **Root:** a one-key object (whose key isn't `@…`/`#text` and whose value isn't an array) becomes the root element. Anything else is wrapped in `rootName` (default `root`): arrays become `<root><item>…</item>…</root>`, and primitives and multi-key objects go inside `<root>`.
+- **Root:** a one-key object (whose key isn't `@…`/`#text` and whose value isn't an array) becomes the root element. Anything else is wrapped in `rootName` (default `root`): arrays become `<root><item>…</item>…</root>`, and multi-key objects go inside `<root>`. A top-level primitive (number, string, boolean, null) is an **error**, because XML needs a root element.
 - `"@x"` keys become attributes (strings, numbers, booleans or null only). `"#text"` becomes text content, and other keys become child elements.
 - An array under key `k` becomes repeated `<k>` elements. Nested arrays are wrapped as `<k><item>…</item></k>`.
 - `null` becomes `<k/>`, `""` becomes `<k></k>`, and numbers and booleans become their text.
