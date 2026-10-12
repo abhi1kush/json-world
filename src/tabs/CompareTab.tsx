@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { diffLines } from 'diff';
 import CodeEditor from '../components/CodeEditor';
 import * as J from '../lib/json';
-import { diff, summarize, DiffNode, DiffOptions, diffText, sideBySide, LineRow } from '../lib/diff';
+import { sortArraysDeep, diff, summarize, DiffNode, DiffOptions, diffText, sideBySide, LineRow } from '../lib/diff';
 
 const ROW_H = 22;
 const LEFT = { service: 'api', version: '1.4.0', replicas: 3, env: { LOG_LEVEL: 'info', REGION: 'eu-west-1' }, users: [{ id: 1, name: 'Ada', role: 'admin' }, { id: 2, name: 'Alan', role: 'dev' }, { id: 3, name: 'Grace', role: 'dev' }], tags: ['web', 'public'], owner: null };
@@ -86,16 +86,20 @@ export default function CompareTab({ getViewerText }: { getViewerText: () => str
   const [leftText, setLeftText] = useState(() => JSON.stringify(LEFT, null, 2));
   const [rightText, setRightText] = useState(() => JSON.stringify(RIGHT, null, 2));
   const [ignoreOrder, setIgnoreOrder] = useState(true);
-  const [arrayKey, setArrayKey] = useState('');
+  const [checkOrder, setCheckOrder] = useState(false);
   const [onlyDiffs, setOnlyDiffs] = useState(false);
   const [view, setView] = useState<'tree' | 'text'>('tree');
   const [overrides, setOverrides] = useState<Map<string, boolean>>(new Map());
   const [cur, setCur] = useState(-1);
   const [showInputs, setShowInputs] = useState(true);
   const L = useParsed(leftText), R = useParsed(rightText);
-  const opts: DiffOptions = useMemo(() => ({ ignoreKeyOrder: ignoreOrder, arrayKey: arrayKey.trim() || undefined }), [ignoreOrder, arrayKey]);
+  // By default arrays are sorted bottom-up before comparing (then compared by index);
+  // 'Check order differences' skips sorting so array order changes are reported.
+  const opts: DiffOptions = useMemo(() => ({ ignoreKeyOrder: ignoreOrder }), [ignoreOrder]);
   const [lastGood, setLastGood] = useState<{ a: J.JNode; b: J.JNode } | null>(null);
-  useEffect(() => { if (L.ok && R.ok) setLastGood({ a: L.node, b: R.node }); }, [L, R]);
+  const [rawGood, setRawGood] = useState<{ a: J.JNode; b: J.JNode } | null>(null);
+  useEffect(() => { if (L.ok && R.ok) setRawGood({ a: L.node, b: R.node }); }, [L, R]);
+  useEffect(() => { setLastGood(rawGood && (checkOrder ? rawGood : { a: sortArraysDeep(rawGood.a), b: sortArraysDeep(rawGood.b) })); }, [rawGood, checkOrder]);
   const d = useMemo(() => (lastGood ? diff(lastGood.a, lastGood.b, opts) : null), [lastGood, opts]);
   const summary = useMemo(() => (d ? summarize(d) : null), [d]);
   useEffect(() => { setOverrides(new Map()); setCur(-1); }, [d]);
@@ -155,14 +159,14 @@ export default function CompareTab({ getViewerText }: { getViewerText: () => str
         <button className={view === 'text' ? 'on' : ''} onClick={() => { setView('text'); setCur(-1); }}>Text diff</button>
         <span className="sep" />
         <label><input type="checkbox" checked={ignoreOrder} onChange={e => setIgnoreOrder(e.target.checked)} aria-label="ignore key order" /> Ignore key order</label>
-        <label>Match arrays by <input value={arrayKey} onChange={e => setArrayKey(e.target.value)} placeholder="e.g. id" size={6} aria-label="array key" /></label>
+        <label title="Off (default): every array is sorted bottom-up by canonical JSON before comparing, so element order is ignored. On: arrays are compared by index and order changes are differences."><input type="checkbox" checked={checkOrder} onChange={e => setCheckOrder(e.target.checked)} aria-label="check order differences" /> Check order differences</label>
         {view === 'tree' ? <label><input type="checkbox" checked={onlyDiffs} onChange={e => setOnlyDiffs(e.target.checked)} aria-label="only differences" /> Only differences</label> : null}
         {view === 'tree' ? <><button onClick={() => expandAll(true)}>Expand all</button><button onClick={() => expandAll(false)}>Collapse all</button></> : null}
         <span className="sep" />
         <button onClick={() => goDiff(-1)} disabled={!total} aria-label="previous difference">◀ Prev</button>
         <span className="navpos" data-testid="diff-pos">{total ? `${cur >= 0 ? cur + 1 : '–'} / ${total}` : '0 / 0'}</span>
         <button onClick={() => goDiff(1)} disabled={!total} aria-label="next difference">Next ▶</button>
-        {summary ? <span className="summarybar" data-testid="diff-summary"><b className="s-add">+{summary.added} added</b> <b className="s-rem">−{summary.removed} removed</b> <b className="s-chg">~{summary.changed} changed</b></span> : null}
+        {summary ? <span className="summarybar" data-testid="diff-summary"><b className="s-add">+{summary.added} added</b> <b className="s-rem">−{summary.removed} removed</b> <b className="s-chg">~{summary.changed} changed</b>{checkOrder ? null : <span className="sortnote" data-testid="sort-note" title="Every array is sorted (deepest first) by the canonical JSON of its elements before comparing"> · Arrays sorted</span>}</span> : null}
       </header>
       {showInputs ? (
         <div className="cmp-inputs">
@@ -195,6 +199,7 @@ export default function CompareTab({ getViewerText }: { getViewerText: () => str
           {summary && summary.total === 0 ? <div className="nodiff">✔ No differences</div> : null}
         </div>
       ) : (
+        <>{!checkOrder || ignoreOrder ? <div className="textnote" data-testid="text-note">Showing pretty-printed JSON with {[!checkOrder && 'arrays sorted', ignoreOrder && 'object keys sorted'].filter(Boolean).join(' and ')} (as compared).</div> : null}
         <div className="dtext" data-testid="diff-text">
           {(['l', 'r'] as const).map(s => (
             <div key={s} className="dtext-pane" ref={s === 'l' ? lRef : rRef} onScroll={() => onTextScroll(s)}>
@@ -209,7 +214,7 @@ export default function CompareTab({ getViewerText }: { getViewerText: () => str
               </div>
             </div>
           ))}
-        </div>
+        </div></>
       )}
     </div>
   );
