@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import CodeEditor from '../components/CodeEditor';
+import { persist, pick, isStr, isBool, oneOf } from '../lib/storage';
 import { generateJava, DEFAULT_JAVA_OPTIONS, JavaOptions } from '../lib/java';
 
 const SAMPLE = JSON.stringify({
@@ -10,9 +11,20 @@ const SAMPLE = JSON.stringify({
 }, null, 2);
 
 export default function JavaTab({ getViewerText }: { getViewerText: () => string }) {
-  const [input, setInput] = useState(SAMPLE);
-  const [debounced, setDebounced] = useState(SAMPLE);
-  const [o, setO] = useState<JavaOptions>(DEFAULT_JAVA_OPTIONS);
+  const [saved] = useState(() => persist.load('java', x => {
+    if (!x || typeof x !== 'object') return undefined;
+    const r = x as { input?: unknown; options?: unknown };
+    const D = DEFAULT_JAVA_OPTIONS;
+    const options = pick(r.options, D, {
+      className: isStr, packageName: isStr, mode: oneOf(['class', 'lombok', 'record'] as const), gettersSetters: isBool, constructors: isBool,
+      toStringEqualsHashCode: isBool, lombokBuilder: isBool, primitives: isBool, bigDecimal: isBool, ignoreUnknown: isBool, includeNonNull: isBool, reuseClasses: isBool,
+    }) ?? D;
+    return { input: isStr(r.input) ? r.input : SAMPLE, options };
+  }));
+  const [input, setInput] = useState(saved?.input ?? SAMPLE);
+  const [debounced, setDebounced] = useState(saved?.input ?? SAMPLE);
+  const [o, setO] = useState<JavaOptions>(saved?.options ?? DEFAULT_JAVA_OPTIONS);
+  useEffect(() => { persist.save('java', { input, options: o }); }, [input, o]);
   const [note, setNote] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   useEffect(() => { const id = setTimeout(() => setDebounced(input), 150); return () => clearTimeout(id); }, [input]);
