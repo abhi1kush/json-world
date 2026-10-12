@@ -7,9 +7,10 @@ import { generateJava, JavaOptions } from '../../src/lib/java';
 const out = process.argv[2] ?? '/tmp/json-world-java';
 const here = new URL('.', import.meta.url).pathname;
 const variants: Record<string, Partial<JavaOptions>> = {
-  plain: { mode: 'class', toStringEqualsHashCode: true },
+  appDefaults: {}, // app defaults: Lombok, no hand-written accessors
+  plain: { mode: 'class', gettersSetters: true, toStringEqualsHashCode: true },
   plainFields: { mode: 'class', gettersSetters: false, constructors: false, ignoreUnknown: true, includeNonNull: true },
-  plainPrimBigDec: { mode: 'class', primitives: true, bigDecimal: true, reuseClasses: false },
+  plainPrimBigDec: { mode: 'class', gettersSetters: true, primitives: true, bigDecimal: true, reuseClasses: false },
   lombok: { mode: 'lombok', lombokBuilder: true, ignoreUnknown: true },
   lombokPrim: { mode: 'lombok', primitives: true, includeNonNull: true },
   record: { mode: 'record', ignoreUnknown: true },
@@ -26,7 +27,7 @@ for (const file of readdirSync(join(here, 'samples')).filter(f => f.endsWith('.j
     const dir = join(out, 'src', ...pkg.split('.'));
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'Request.java'), r.code);
-    cases.push([`${pkg}.Request`, join(here, 'samples', file), json.trim().startsWith('[') ? 'array' : 'object', o.ignoreUnknown ? 'ignoreUnknown' : '-', o.mode].join('\t'));
+    cases.push([`${pkg}.Request`, join(here, 'samples', file), json.trim().startsWith('[') ? 'array' : 'object', o.ignoreUnknown ? 'ignoreUnknown' : '-', o.mode ?? 'lombok'].join('\t'));
   }
 }
 writeFileSync(join(out, 'cases.txt'), cases.join('\n') + '\n');

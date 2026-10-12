@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateJava, toFieldName, toClassName, itemClassName, singularize, infer, merge, numberType, jacksonImplicitName, JavaOptions } from './java';
+import { DEFAULT_JAVA_OPTIONS, generateJava, toFieldName, toClassName, itemClassName, singularize, infer, merge, numberType, jacksonImplicitName, JavaOptions } from './java';
 import { parse } from './json';
 
 const gen = (json: unknown, o: Partial<JavaOptions> = {}) => {
@@ -83,7 +83,7 @@ describe('classes', () => {
     for (const l of ['private Long id;', 'private String name;', 'private List<String> tags;', 'private Extra extra;']) expect(r.code).toContain(l);
   });
   it('dedupes class name clashes and avoids top/JDK names', () => {
-    const r = gen({ request: { a: 1 }, data: { user: { x: 1 } }, user: { y: 'q' }, string: { z: 1 }, list: [{ a: 'b' }] }, { reuseClasses: false });
+    const r = gen({ request: { a: 1 }, data: { user: { x: 1 } }, user: { y: 'q' }, string: { z: 1 }, list: [{ a: 'b' }] }, { reuseClasses: false, mode: 'class' });
     expect(r.classes).toEqual(['Request', 'Request2', 'Data', 'User', 'User2', 'String2', 'ListItem']);
     expect(gen({ data: { a: 1 } }, { mode: 'lombok' }).classes).toEqual(['Request', 'Data2']);
   });
@@ -114,9 +114,21 @@ describe('classes', () => {
 });
 
 describe('modes and options', () => {
+  it('defaults to Lombok with no hand-written accessors', () => {
+    expect(DEFAULT_JAVA_OPTIONS.mode).toBe('lombok');
+    expect(DEFAULT_JAVA_OPTIONS.gettersSetters).toBe(false);
+    expect(DEFAULT_JAVA_OPTIONS.lombokBuilder).toBe(false);
+    const c = code({ user_id: 1, items: [{ sku: 'a' }] });
+    for (const a of ['@Data', '@NoArgsConstructor', '@AllArgsConstructor', 'import lombok.Data;']) expect(c).toContain(a);
+    expect(c).not.toContain('@Builder');
+    expect(c).not.toMatch(/public \S+ get\w+\(|public void set\w+\(/);
+    expect(c.match(/@Data/g)!.length).toBe(2); // top + nested Item
+    // plain mode still has no accessors unless asked for
+    expect(code({ a: 1 }, { mode: 'class' })).not.toContain('getA()');
+  });
   const src = { user_id: 1, isActive: true, aB: 'x', items: [{ sku: 'a', qty: 2 }] };
   it('plain class with getters/setters, constructors, toString/equals/hashCode', () => {
-    const c = code(src, { toStringEqualsHashCode: true });
+    const c = code(src, { mode: 'class', gettersSetters: true, toStringEqualsHashCode: true });
     expect(c).toContain('public Request() {');
     expect(c).toContain('public Request(Integer userId, Boolean isActive, String aB, List<Item> items) {');
     expect(c).toContain('public Integer getUserId() {'); expect(c).toContain('public void setUserId(Integer userId) {');
@@ -126,7 +138,7 @@ describe('modes and options', () => {
     expect(c).toMatch(/@JsonProperty\("aB"\)\n\s+public String getAB\(\)/);
   });
   it('without getters/constructors', () => {
-    const c = code(src, { gettersSetters: false, constructors: false });
+    const c = code(src, { mode: 'class', gettersSetters: false, constructors: false });
     expect(c).not.toContain('get'); expect(c).not.toContain('public Request(');
   });
   it('lombok mode', () => {
