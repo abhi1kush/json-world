@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import CodeEditor from '../components/CodeEditor';
+import { persist, pick, isStr, isBool, oneOf } from '../lib/storage';
 import { ConvertFn, ConvertOptions, ConvertResult, Format, EXT, MIME, detectFormat, loadConverter } from '../lib/convert';
 
 const SAMPLES: Record<Format, string> = {
@@ -12,11 +13,20 @@ const FORMATS: Format[] = ['json', 'yaml', 'xml'];
 export default function ConvertTab({ onSendToViewer, getViewerText }: { onSendToViewer: (t: string) => void; getViewerText: () => string }) {
   const [conv, setConv] = useState<ConvertFn | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
-  const [from, setFrom] = useState<Format>('json');
-  const [to, setTo] = useState<Format>('yaml');
-  const [input, setInput] = useState(SAMPLES.json);
+  const [saved] = useState(() => {
+    const fmt = oneOf(FORMATS);
+    const s = persist.load('convert', x => pick(x, { from: 'json' as Format, to: 'yaml' as Format, input: SAMPLES.json, opts: {} as Record<string, unknown> }, { from: fmt, to: fmt, input: isStr, opts: v => !!v && typeof v === 'object' }));
+    if (s && s.from === s.to) s.to = s.from === 'json' ? 'yaml' : 'json';
+    return s;
+  });
+  const [from, setFrom] = useState<Format>(saved?.from ?? 'json');
+  const [to, setTo] = useState<Format>(saved?.to ?? 'yaml');
+  const [input, setInput] = useState(saved?.input ?? SAMPLES.json);
   const [result, setResult] = useState<ConvertResult | null>(null);
-  const [opts, setOpts] = useState<ConvertOptions>({ rootName: 'root', invalidNames: 'sanitize', inferTypes: false, indent: 2, multiDoc: 'array' });
+  const [opts, setOpts] = useState<ConvertOptions>(() => pick(saved?.opts, { rootName: 'root', invalidNames: 'sanitize', inferTypes: false, indent: 2, multiDoc: 'array' } as Required<ConvertOptions>, {
+    rootName: isStr, invalidNames: oneOf(['sanitize', 'error'] as const), inferTypes: isBool, indent: v => v === 0 || v === 2 || v === 4, multiDoc: oneOf(['array', 'error'] as const),
+  }) ?? { rootName: 'root', invalidNames: 'sanitize', inferTypes: false, indent: 2, multiDoc: 'array' });
+  useEffect(() => { persist.save('convert', { from, to, input, opts }); }, [from, to, input, opts]);
   const [note, setNote] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 

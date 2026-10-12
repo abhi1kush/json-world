@@ -21,6 +21,14 @@ A fast, correct JSON viewer & editor: a CodeMirror 6 text editor on the left, an
 - **Faithful model** – key order is kept exactly as written, integer-like keys included (`{"b":1,"10":2}` is not reordered), and number text is kept as written (big integers don't lose precision).
 - Draggable splitter. On phones the panels stack vertically.
 
+## Saved data
+
+Everything you enter is saved in this browser's `localStorage` and nothing is sent anywhere. That covers the Viewer text, indent and expanded/collapsed nodes; the Convert input, formats and options; the Compare inputs and toggles; the JSON → Java input and all its options; and the active tab. Data is restored before the first render, and samples are shown only when nothing is saved.
+- Keys are versioned (`jsonworld:v1:*`). Saves are debounced (300 ms) and flushed on `visibilitychange`, `pagehide` and `beforeunload`. With several tabs open, the last write wins.
+- Corrupted, invalid or old-version data is ignored field by field, falling back to defaults.
+- If a value is too big for the browser quota (e.g. >5 MB), it stays in memory for the session, any older saved copy is removed, and a small "too large to save locally" notice appears. If storage is disabled (some private modes), the app still works and says data won't be kept.
+- **Clear saved data** (top right, asks for confirmation) removes every `jsonworld:*` key and reloads with the samples.
+
 ## Tabs
 
 The app has four tabs: **Viewer**, **Convert**, **Compare** and **JSON → Java**. The URL hash (`#convert`, `#compare`, `#java`) selects one, and every tab keeps its state when you switch away.

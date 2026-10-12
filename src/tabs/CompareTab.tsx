@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { diffLines } from 'diff';
 import CodeEditor from '../components/CodeEditor';
+import { persist, pick, isStr, isBool, oneOf } from '../lib/storage';
 import * as J from '../lib/json';
 import { sortArraysDeep, diff, summarize, DiffNode, DiffOptions, diffText, sideBySide, LineRow } from '../lib/diff';
 
@@ -83,12 +84,15 @@ const scrollIntoRow = (el: HTMLElement | null, idx: number) => {
 };
 
 export default function CompareTab({ getViewerText }: { getViewerText: () => string }) {
-  const [leftText, setLeftText] = useState(() => JSON.stringify(LEFT, null, 2));
-  const [rightText, setRightText] = useState(() => JSON.stringify(RIGHT, null, 2));
-  const [ignoreOrder, setIgnoreOrder] = useState(true);
-  const [checkOrder, setCheckOrder] = useState(false);
-  const [onlyDiffs, setOnlyDiffs] = useState(false);
-  const [view, setView] = useState<'tree' | 'text'>('tree');
+  const [saved] = useState(() => persist.load('compare', x => pick(x, { left: JSON.stringify(LEFT, null, 2), right: JSON.stringify(RIGHT, null, 2), ignoreOrder: true, checkOrder: false, onlyDiffs: false, view: 'tree' as 'tree' | 'text' },
+    { left: isStr, right: isStr, ignoreOrder: isBool, checkOrder: isBool, onlyDiffs: isBool, view: oneOf(['tree', 'text'] as const) })));
+  const [leftText, setLeftText] = useState(() => saved?.left ?? JSON.stringify(LEFT, null, 2));
+  const [rightText, setRightText] = useState(() => saved?.right ?? JSON.stringify(RIGHT, null, 2));
+  const [ignoreOrder, setIgnoreOrder] = useState(saved?.ignoreOrder ?? true);
+  const [checkOrder, setCheckOrder] = useState(saved?.checkOrder ?? false);
+  const [onlyDiffs, setOnlyDiffs] = useState(saved?.onlyDiffs ?? false);
+  const [view, setView] = useState<'tree' | 'text'>(saved?.view ?? 'tree');
+  useEffect(() => { persist.save('compare', { left: leftText, right: rightText, ignoreOrder, checkOrder, onlyDiffs, view }); }, [leftText, rightText, ignoreOrder, checkOrder, onlyDiffs, view]);
   const [overrides, setOverrides] = useState<Map<string, boolean>>(new Map());
   const [cur, setCur] = useState(-1);
   const [showInputs, setShowInputs] = useState(true);

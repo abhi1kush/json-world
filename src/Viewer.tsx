@@ -3,6 +3,7 @@ import Editor from './components/Editor';
 import { Tree, Row, flatten, isExpanded, ExpandMode, EditTarget } from './components/Tree';
 import * as J from './lib/json';
 import { SAMPLE } from './sample';
+import { persist, pick, isStr, oneOf } from './lib/storage';
 
 type Toast = { msg: string; kind: 'ok' | 'err'; n: number } | null;
 type Ctx = { x: number; y: number; row: Row } | null;
@@ -14,14 +15,23 @@ const initialText = JSON.stringify(SAMPLE, null, 2);
 export interface ViewerApi { getText: () => string; loadText: (t: string) => void }
 
 export default function Viewer({ apiRef, active }: { apiRef: React.MutableRefObject<ViewerApi | null>; active: boolean }) {
-  const [indent, setIndent] = useState(2);
-  const [text, setText] = useState(initialText);
-  const [root, setRoot] = useState<J.JNode>(() => (J.parse(initialText) as any).node);
-  const [error, setError] = useState<J.ParseError | null>(null);
+  // restore saved state synchronously (before first render)
+  const [saved] = useState(() => persist.load('viewer', x => pick(x, { text: initialText, indent: 2, mode: 'auto' as ExpandMode, autoDepth: 3, overrides: [] as [string, boolean][] }, {
+    text: isStr, indent: v => v === 2 || v === 4, mode: oneOf(['auto', 'all', 'none'] as const), autoDepth: v => v === 1 || v === 3,
+    overrides: v => Array.isArray(v) && v.every(e => Array.isArray(e) && typeof e[0] === 'string' && typeof e[1] === 'boolean'),
+  })));
+  const start = saved?.text ?? initialText;
+  const [indent, setIndent] = useState(saved?.indent ?? 2);
+  const [text, setText] = useState(start);
+  const [root, setRoot] = useState<J.JNode>(() => { const r = J.parse(start); return r.ok ? r.node : { t: 'null' }; });
+  const [error, setError] = useState<J.ParseError | null>(() => { const r = J.parse(start); return r.ok ? null : r.error; });
   const [selected, setSelected] = useState<J.Path | null>(null);
-  const [mode, setMode] = useState<ExpandMode>('auto');
-  const [autoDepth, setAutoDepth] = useState(3);
-  const [overrides, setOverrides] = useState<Map<string, boolean>>(new Map());
+  const [mode, setMode] = useState<ExpandMode>(saved?.mode ?? 'auto');
+  const [autoDepth, setAutoDepth] = useState(saved?.autoDepth ?? (start.length > 1_000_000 ? 1 : 3));
+  const [overrides, setOverrides] = useState<Map<string, boolean>>(() => new Map(saved?.overrides ?? []));
+  useEffect(() => {
+    persist.save('viewer', { text, indent, mode, autoDepth, overrides: overrides.size <= 5000 ? [...overrides] : [] });
+  }, [text, indent, mode, autoDepth, overrides]);
   const [editing, setEditing] = useState<EditTarget>(null);
   const [q, setQ] = useState('');
   const [qd, setQd] = useState('');
@@ -33,7 +43,7 @@ export default function Viewer({ apiRef, active }: { apiRef: React.MutableRefObj
 
   const rootRef = useRef(root); rootRef.current = root;
   const indentRef = useRef(indent); indentRef.current = indent;
-  const hist = useRef({ stack: [initialText], idx: 0 });
+  const hist = useRef({ stack: [start], idx: 0 });
   const pending = useRef<{ timer: number; text: string } | null>(null);
   const clip = useRef<J.Clip | null>(null);
   const treeRef = useRef<HTMLDivElement>(null);
