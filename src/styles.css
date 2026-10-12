@@ -71,3 +71,52 @@ mark { background: #ffe066; color: inherit; border-radius: 2px; }
   .sep { display: none; }
   .toolbar button { padding: 4px 7px; font-size: 12px; }
 }
+
+/* ---------- tabs ---------- */
+.tabs { display: flex; align-items: center; gap: 2px; padding: 6px 10px 0; background: #151922; }
+.tabs .brand { color: #fff; margin-right: 14px; }
+.tabs button { background: transparent; color: #aab2c5; border: 0; border-radius: 6px 6px 0 0; padding: 7px 16px; font-size: 14px; cursor: pointer; }
+.tabs button.active { background: #1f2430; color: #fff; font-weight: 600; }
+.tabs button:hover:not(.active) { color: #fff; }
+.viewer, .tabpane, .convert, .compare { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.loading { padding: 20px; color: #6a7285; }
+.toolbar label { font-size: 13px; display: inline-flex; gap: 4px; align-items: center; }
+.toolbar input:not([type]), .toolbar input[type=text] { padding: 3px 6px; border-radius: 4px; border: 1px solid #454d60; }
+.toolbar button.on { background: #4b67c9; border-color: #4b67c9; }
+.note { font-size: 12px; color: #c6f0c8; }
+.optbar { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; padding: 5px 10px; background: #e9ecf2; border-bottom: 1px solid #d5d9e2; font-size: 13px; min-height: 34px; }
+.optbar label { display: inline-flex; gap: 5px; align-items: center; }
+.optbar input:not([type=checkbox]) { padding: 2px 5px; border: 1px solid #c4c9d4; border-radius: 4px; }
+.muted { color: #6a7285; font-size: 12px; margin-left: auto; }
+.split2 { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: #d5d9e2; min-height: 0; }
+.panehead { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #4a5263; padding: 4px 10px; background: #f3f5f9; border-bottom: 1px solid #e1e4ea; min-height: 30px; }
+.panehead button { font-size: 12px; background: #fff; border: 1px solid #c4c9d4; border-radius: 4px; padding: 1px 7px; cursor: pointer; font-weight: normal; }
+.grow { flex: 1; }
+/* compare */
+.cmp-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: #d5d9e2; height: 34%; min-height: 160px; }
+.navpos { font-size: 12px; color: #c6cbd8; min-width: 44px; text-align: center; }
+.summarybar { font-size: 12px; margin-left: 6px; }
+.s-add { color: #7ee08a; } .s-rem { color: #ff8f86; } .s-chg { color: #ffcf5c; }
+.dtree, .dtext-pane { flex: 1; overflow: auto; background: #fff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; position: relative; }
+.drow { display: grid; grid-template-columns: 1fr 1fr; cursor: default; }
+.dcell { display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; border-right: 1px solid #eceef3; }
+.dcell.empty { background: repeating-linear-gradient(45deg, #fafbfc, #fafbfc 4px, #f0f2f6 4px, #f0f2f6 8px); }
+.k-added .dcell:not(.empty) { background: #e3f7e6; }
+.k-removed .dcell:not(.empty) { background: #fde7e5; }
+.k-changed .dcell { background: #fff3d1; }
+.drow.current { outline: 2px solid #4b67c9; outline-offset: -2px; }
+.drow:hover { filter: brightness(.97); }
+.dbadge { margin-left: 8px; font-size: 10.5px; background: #f0a500; color: #fff; border-radius: 8px; padding: 0 6px; }
+.nodiff { position: absolute; top: 40px; left: 0; right: 0; text-align: center; color: #2f7d32; font-size: 14px; }
+.dtext { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: #d5d9e2; min-height: 0; }
+.tline { display: flex; white-space: pre; }
+.tline .ln { flex: none; width: 48px; text-align: right; padding-right: 8px; color: #9aa1b2; background: #f6f7f9; user-select: none; }
+.tline .lt { padding-left: 6px; }
+.tline.add { background: #e3f7e6; } .tline.rem { background: #fde7e5; } .tline.chg { background: #fff3d1; }
+.tline.pad { background: repeating-linear-gradient(45deg, #fafbfc, #fafbfc 4px, #f0f2f6 4px, #f0f2f6 8px); }
+.tline.current { outline: 2px solid #4b67c9; outline-offset: -2px; }
+@media (max-width: 760px) {
+  .split2, .cmp-inputs { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  .cmp-inputs { height: 50%; }
+  .tabs button { padding: 6px 10px; }
+}

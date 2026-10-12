@@ -1,0 +1,89 @@
+import { useEffect, useRef, useState } from 'react';
+import CodeEditor from '../components/CodeEditor';
+import { ConvertFn, ConvertOptions, ConvertResult, Format, EXT, MIME, detectFormat, loadConverter } from '../lib/convert';
+
+const SAMPLES: Record<Format, string> = {
+  json: JSON.stringify({ library: { '@name': 'City', book: [{ '@id': '1', title: 'Dune', year: 1965 }, { '@id': '2', title: 'Emma', year: 1815 }], open: true } }, null, 2),
+  yaml: 'defaults: &d\n  retries: 3\n  timeout: 30\nservices:\n  api:\n    <<: *d\n    port: 8080\n  worker:\n    <<: *d\n    retries: 5\nbig: 123456789012345678901234567890\n',
+  xml: '<?xml version="1.0"?>\n<library name="City" xmlns:x="urn:x">\n  <book id="1"><title>Dune</title><year>1965</year></book>\n  <book id="2"><title>Emma</title><year>1815</year></book>\n  <x:note><![CDATA[<b>raw</b> & more]]></x:note>\n  <empty/>\n</library>\n',
+};
+const FORMATS: Format[] = ['json', 'yaml', 'xml'];
+
+export default function ConvertTab({ onSendToViewer, getViewerText }: { onSendToViewer: (t: string) => void; getViewerText: () => string }) {
+  const [conv, setConv] = useState<ConvertFn | null>(null);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [from, setFrom] = useState<Format>('json');
+  const [to, setTo] = useState<Format>('yaml');
+  const [input, setInput] = useState(SAMPLES.json);
+  const [result, setResult] = useState<ConvertResult | null>(null);
+  const [opts, setOpts] = useState<ConvertOptions>({ rootName: 'root', invalidNames: 'sanitize', inferTypes: false, indent: 2, multiDoc: 'array' });
+  const [note, setNote] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { loadConverter().then(f => setConv(() => f)).catch(e => setLoadErr(String(e))); }, []);
+  useEffect(() => {
+    if (!conv) return;
+    const id = setTimeout(() => setResult(input.trim() ? conv(input, from, to, opts) : { ok: true, output: '' }), 150);
+    return () => clearTimeout(id);
+  }, [conv, input, from, to, opts]);
+  useEffect(() => { if (!note) return; const id = setTimeout(() => setNote(''), 2500); return () => clearTimeout(id); }, [note]);
+
+  const output = result?.ok ? result.output : '';
+  const swap = () => { if (result?.ok && output) setInput(output); setFrom(to); setTo(from); };
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([output], { type: MIME[to] }));
+    const a = document.createElement('a'); a.href = url; a.download = `converted.${EXT[to]}`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const copy = () => navigator.clipboard?.writeText(output).then(() => setNote('Copied output'), () => setNote('Copy failed'));
+  const onFile = async (f?: File) => { if (!f) return; const t = await f.text(); const fmt = detectFormat(t, f.name); if (fmt) { setFrom(fmt); if (fmt === to) setTo(fmt === 'json' ? 'yaml' : 'json'); } setInput(t); setNote(`Loaded ${f.name}`); };
+  const send = () => {
+    if (!conv) return;
+    const r = to === 'json' ? result : conv(input, from, 'json', { ...opts, indent: 2 });
+    if (r?.ok) onSendToViewer(r.output); else setNote('Fix conversion errors first');
+  };
+  const set = (p: Partial<ConvertOptions>) => setOpts(o => ({ ...o, ...p }));
+
+  return (
+    <div className="convert">
+      <header className="toolbar">
+        <label>From <select aria-label="from" value={from} onChange={e => { const f = e.target.value as Format; setFrom(f); if (f === to) setTo(from); }}>{FORMATS.map(f => <option key={f} value={f}>{f.toUpperCase()}</option>)}</select></label>
+        <button onClick={swap} title="Swap input/output" aria-label="swap">⇄ Swap</button>
+        <label>To <select aria-label="to" value={to} onChange={e => { const t = e.target.value as Format; setTo(t); if (t === from) setFrom(to); }}>{FORMATS.map(f => <option key={f} value={f}>{f.toUpperCase()}</option>)}</select></label>
+        <span className="sep" />
+        <button onClick={() => fileRef.current?.click()}>Upload</button>
+        <input ref={fileRef} type="file" hidden accept=".json,.yaml,.yml,.xml,text/*" onChange={e => { onFile(e.target.files?.[0]); e.target.value = ''; }} />
+        <button onClick={() => setInput(SAMPLES[from])}>Sample</button>
+        <button onClick={() => { setFrom('json'); if (to === 'json') setTo('yaml'); setInput(getViewerText()); }}>Use viewer JSON</button>
+        <span className="sep" />
+        <button onClick={copy} disabled={!output}>Copy</button>
+        <button onClick={download} disabled={!output}>Download .{EXT[to]}</button>
+        <button onClick={send} disabled={!result?.ok || !output} data-testid="send-to-viewer">Send to Viewer</button>
+        {note ? <span className="note">{note}</span> : null}
+      </header>
+      <div className="optbar">
+        {to === 'xml' ? <>
+          <label>Root name <input aria-label="root name" value={opts.rootName} onChange={e => set({ rootName: e.target.value })} size={8} /></label>
+          <label>Invalid names <select value={opts.invalidNames} onChange={e => set({ invalidNames: e.target.value as any })}><option value="sanitize">sanitize</option><option value="error">error</option></select></label>
+        </> : null}
+        {from === 'xml' ? <label><input type="checkbox" checked={!!opts.inferTypes} onChange={e => set({ inferTypes: e.target.checked })} /> Infer numbers/booleans</label> : null}
+        {from === 'yaml' ? <label>Multiple documents <select value={opts.multiDoc} onChange={e => set({ multiDoc: e.target.value as any })}><option value="array">→ array</option><option value="error">error</option></select></label> : null}
+        {to !== 'yaml' ? <label>Indent <select value={opts.indent} onChange={e => set({ indent: Number(e.target.value) })}><option value={0}>0</option><option value={2}>2</option><option value={4}>4</option></select></label> : null}
+        <span className="muted">Rust → WebAssembly{conv ? '' : ' (loading…)'}</span>
+      </div>
+      <main className="split2">
+        <section className="pane">
+          <div className="panehead">Input ({from.toUpperCase()})</div>
+          <CodeEditor value={input} onChange={setInput} lang={from} testId="convert-input" errorLine={result && !result.ok ? result.line : null} />
+          <div className={'status' + (result && !result.ok ? ' err' : '')} data-testid="convert-status">
+            {loadErr ? `Failed to load converter: ${loadErr}` : !result ? 'Loading converter…' : result.ok ? `✔ Converted ${from.toUpperCase()} → ${to.toUpperCase()}` : `✖ ${result.line ? `Line ${result.line}, Col ${result.col}: ` : ''}${result.message}`}
+          </div>
+        </section>
+        <section className="pane">
+          <div className="panehead">Output ({to.toUpperCase()})</div>
+          <CodeEditor value={output} lang={to} readOnly testId="convert-output" />
+        </section>
+      </main>
+    </div>
+  );
+}
