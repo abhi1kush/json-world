@@ -121,7 +121,7 @@ fn txt(v: &Value) -> String { serde_json::to_string(v).unwrap() }
     let mut opt = o(); opt.root_name = "data".into();
     assert!(xml::to_xml(&j(r##"{"a":1,"b":2}"##), &opt).unwrap().contains("<data>\n  <a>1</a>\n  <b>2</b>\n</data>"));
     assert!(xml::to_xml(&j("[1,2]"), &opt).unwrap().contains("<data>\n  <item>1</item>\n  <item>2</item>\n</data>"));
-    assert!(xml::to_xml(&j("5"), &opt).unwrap().contains("<data>5</data>"));
+    for t in ["5", "\"s\"", "true", "null"] { let e = xml::to_xml(&j(t), &opt).unwrap_err(); assert!(e.message.contains("top-level"), "{}", e.message); }
     assert!(xml::to_xml(&j(r##"{"a":[1,2]}"##), &opt).unwrap().contains("<data>\n  <a>1</a>\n  <a>2</a>\n</data>"));
 }
 #[test] fn json_to_xml_invalid_names() {
@@ -151,4 +151,14 @@ fn txt(v: &Value) -> String { serde_json::to_string(v).unwrap() }
     assert_eq!(r["ok"], json!(false)); assert!(r["line"].is_number());
     let r: Value = serde_json::from_str(&convert("[1]", "json", "xml", r##"{"rootName":"list","indent":0}"##)).unwrap();
     assert_eq!(r["output"], json!("<?xml version=\"1.0\" encoding=\"UTF-8\"?><list><item>1</item></list>"));
+}
+
+#[test] fn xml_invalid_chars_and_names_have_position() {
+    let pos = |s: &str| { let e = xml::parse_xml(s, &o()).unwrap_err(); (e.line.unwrap(), e.col.unwrap(), e.message) };
+    let (l, c, m) = pos("<a>\n ok \u{1}</a>"); assert_eq!((l, c), (2, 5)); assert!(m.contains("U+0001"), "{m}");
+    let (l, c, m) = pos("<a>\n  <1b/>\n</a>"); assert_eq!((l, c), (2, 4)); assert!(m.contains("Invalid element name '1b'"), "{m}");
+    let (_, _, m) = pos("<a 1x=\"v\"/>"); assert!(m.contains("Invalid attribute name"), "{m}");
+    let (l, c, m) = pos("<r>\n  <a>\n    <b/>\n</r>"); assert!(m.contains("expected `</a>`"), "{m}"); assert_eq!((l, c), (4, 1));
+    let (l, c, m) = pos("<r>\n  <a>x</a>\n  <b>"); assert_eq!((l, c), (3, 3)); assert!(m.contains("Unclosed element <b>"), "{m}");
+    assert!(xml::parse_xml("<x:a xmlns:x=\"u\" x:y=\"1\"><_b-c.d/></x:a>", &o()).is_ok());
 }

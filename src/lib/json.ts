@@ -83,7 +83,7 @@ export function parse(text: string): ParseResult {
         i++;
         entries.push([k, value(depth + 1)]);
         ws();
-        if (text[i] === ',') { i++; ws(); if (text[i] === '}') fail('Trailing comma'); continue; }
+        if (text[i] === ',') { const comma = i; i++; ws(); if (text[i] === '}') fail("Trailing comma before '}'", comma); continue; }
         if (text[i] === '}') { i++; return { t: 'object', entries }; }
         fail("Expected ',' or '}'");
       }
@@ -94,7 +94,7 @@ export function parse(text: string): ParseResult {
       if (text[i] === ']') { i++; return { t: 'array', items }; }
       while (true) {
         items.push(value(depth + 1)); ws();
-        if (text[i] === ',') { i++; ws(); if (text[i] === ']') fail('Trailing comma'); continue; }
+        if (text[i] === ',') { const comma = i; i++; ws(); if (text[i] === ']') fail("Trailing comma before ']'", comma); continue; }
         if (text[i] === ']') { i++; return { t: 'array', items }; }
         fail("Expected ',' or ']'");
       }

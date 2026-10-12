@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import CodeEditor from '../components/CodeEditor';
 import { persist, pick, isStr, isBool, oneOf } from '../lib/storage';
-import { ConvertFn, ConvertOptions, ConvertResult, Format, EXT, MIME, detectFormat, loadConverter } from '../lib/convert';
+import { ConvertFn, ConvertOptions, ConvState, Format, EXT, MIME, detectFormat, loadConverter, runConvert, diagText } from '../lib/convert';
 
 const SAMPLES: Record<Format, string> = {
   json: JSON.stringify({ library: { '@name': 'City', book: [{ '@id': '1', title: 'Dune', year: 1965 }, { '@id': '2', title: 'Emma', year: 1815 }], open: true } }, null, 2),
@@ -22,7 +22,8 @@ export default function ConvertTab({ onSendToViewer, getViewerText }: { onSendTo
   const [from, setFrom] = useState<Format>(saved?.from ?? 'json');
   const [to, setTo] = useState<Format>(saved?.to ?? 'yaml');
   const [input, setInput] = useState(saved?.input ?? SAMPLES.json);
-  const [result, setResult] = useState<ConvertResult | null>(null);
+  const [result, setResult] = useState<ConvState | null>(null);
+  const [lastOutput, setLastOutput] = useState('');
   const [opts, setOpts] = useState<ConvertOptions>(() => pick(saved?.opts, { rootName: 'root', invalidNames: 'sanitize', inferTypes: false, indent: 2, multiDoc: 'array' } as Required<ConvertOptions>, {
     rootName: isStr, invalidNames: oneOf(['sanitize', 'error'] as const), inferTypes: isBool, indent: v => v === 0 || v === 2 || v === 4, multiDoc: oneOf(['array', 'error'] as const),
   }) ?? { rootName: 'root', invalidNames: 'sanitize', inferTypes: false, indent: 2, multiDoc: 'array' });
@@ -33,13 +34,20 @@ export default function ConvertTab({ onSendToViewer, getViewerText }: { onSendTo
   useEffect(() => { loadConverter().then(f => setConv(() => f)).catch(e => setLoadErr(String(e))); }, []);
   useEffect(() => {
     if (!conv) return;
-    const id = setTimeout(() => setResult(input.trim() ? conv(input, from, to, opts) : { ok: true, output: '' }), 150);
+    const id = setTimeout(() => setResult(runConvert(conv, input, from, to, opts)), 150);
     return () => clearTimeout(id);
   }, [conv, input, from, to, opts]);
+  useEffect(() => { if (result?.kind === 'ok') setLastOutput(result.output); else if (result?.kind === 'empty') setLastOutput(''); }, [result]);
+  // when the target format changes, the last valid output is in the wrong format: drop it
+  useEffect(() => { setLastOutput(''); }, [to]);
   useEffect(() => { if (!note) return; const id = setTimeout(() => setNote(''), 2500); return () => clearTimeout(id); }, [note]);
 
-  const output = result?.ok ? result.output : '';
-  const swap = () => { if (result?.ok && output) setInput(output); setFrom(to); setTo(from); };
+  const ok = result?.kind === 'ok';
+  const err = result?.kind === 'error' ? result.diag : null;
+  const stale = !!err && !!lastOutput;
+  const output = ok ? result.output : err ? lastOutput : '';
+  const diags = useMemo(() => err && err.from != null && result?.kind === 'error' ? [{ from: err.from, to: err.to!, message: diagText(err) }] : null, [result]);
+  const swap = () => { if (ok && output) setInput(output); setFrom(to); setTo(from); };
   const download = () => {
     const url = URL.createObjectURL(new Blob([output], { type: MIME[to] }));
     const a = document.createElement('a'); a.href = url; a.download = `converted.${EXT[to]}`; a.click();
@@ -49,7 +57,7 @@ export default function ConvertTab({ onSendToViewer, getViewerText }: { onSendTo
   const onFile = async (f?: File) => { if (!f) return; const t = await f.text(); const fmt = detectFormat(t, f.name); if (fmt) { setFrom(fmt); if (fmt === to) setTo(fmt === 'json' ? 'yaml' : 'json'); } setInput(t); setNote(`Loaded ${f.name}`); };
   const send = () => {
     if (!conv) return;
-    const r = to === 'json' ? result : conv(input, from, 'json', { ...opts, indent: 2 });
+    const r = to === 'json' ? (ok ? { ok: true as const, output } : null) : conv(input, from, 'json', { ...opts, indent: 2 });
     if (r?.ok) onSendToViewer(r.output); else setNote('Fix conversion errors first');
   };
   const set = (p: Partial<ConvertOptions>) => setOpts(o => ({ ...o, ...p }));
@@ -66,9 +74,9 @@ export default function ConvertTab({ onSendToViewer, getViewerText }: { onSendTo
         <button onClick={() => setInput(SAMPLES[from])}>Sample</button>
         <button onClick={() => { setFrom('json'); if (to === 'json') setTo('yaml'); setInput(getViewerText()); }}>Use viewer JSON</button>
         <span className="sep" />
-        <button onClick={copy} disabled={!output}>Copy</button>
-        <button onClick={download} disabled={!output}>Download .{EXT[to]}</button>
-        <button onClick={send} disabled={!result?.ok || !output} data-testid="send-to-viewer">Send to Viewer</button>
+        <button onClick={copy} disabled={!ok || !output}>Copy</button>
+        <button onClick={download} disabled={!ok || !output}>Download .{EXT[to]}</button>
+        <button onClick={send} disabled={!ok || !output} data-testid="send-to-viewer">Send to Viewer</button>
         {note ? <span className="note">{note}</span> : null}
       </header>
       <div className="optbar">
@@ -84,13 +92,14 @@ export default function ConvertTab({ onSendToViewer, getViewerText }: { onSendTo
       <main className="split2">
         <section className="pane">
           <div className="panehead">Input ({from.toUpperCase()})</div>
-          <CodeEditor value={input} onChange={setInput} lang={from} testId="convert-input" errorLine={result && !result.ok ? result.line : null} />
-          <div className={'status' + (result && !result.ok ? ' err' : '')} data-testid="convert-status">
-            {loadErr ? `Failed to load converter: ${loadErr}` : !result ? 'Loading converter…' : result.ok ? `✔ Converted ${from.toUpperCase()} → ${to.toUpperCase()}` : `✖ ${result.line ? `Line ${result.line}, Col ${result.col}: ` : ''}${result.message}`}
+          {err ? <div className="convbanner" role="alert" data-testid="convert-error"><span>✖</span><span><b>{err.title}{err.line != null ? ` at line ${err.line}, column ${err.col}` : ''}:</b> {err.message}</span></div> : null}
+          <CodeEditor value={input} onChange={setInput} lang={from} testId="convert-input" diagnostics={diags} />
+          <div className={'status' + (err ? ' err' : result?.kind === 'empty' ? ' hint' : '')} data-testid="convert-status">
+            {loadErr ? `Failed to load converter: ${loadErr}` : !result ? 'Loading converter…' : result.kind === 'empty' ? `Paste or type ${from.toUpperCase()} on the left (or click Sample) to convert it to ${to.toUpperCase()}.` : ok ? `✔ Converted ${from.toUpperCase()} → ${to.toUpperCase()}` : `✖ ${diagText(err!)}`}
           </div>
         </section>
-        <section className="pane">
-          <div className="panehead">Output ({to.toUpperCase()})</div>
+        <section className={'pane' + (stale ? ' stale' : '')} data-testid="convert-output-pane">
+          <div className="panehead">Output ({to.toUpperCase()}){stale ? <span className="stalelabel" data-testid="stale-label">showing last valid output</span> : null}</div>
           <CodeEditor value={output} lang={to} readOnly testId="convert-output" />
         </section>
       </main>

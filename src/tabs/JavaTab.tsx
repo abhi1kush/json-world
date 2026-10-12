@@ -1,3 +1,4 @@
+import { locate } from '../lib/convert';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import CodeEditor from '../components/CodeEditor';
 import { persist, pick, isStr, isBool, oneOf } from '../lib/storage';
@@ -32,6 +33,11 @@ export default function JavaTab({ getViewerText }: { getViewerText: () => string
   const res = useMemo(() => generateJava(debounced, o), [debounced, o]);
   const [lastCode, setLastCode] = useState('');
   useEffect(() => { if (res.ok) setLastCode(res.code); }, [res]);
+  const javaDiag = useMemo(() => {
+    if (res.ok || res.line == null || debounced !== input) return null;
+    const l = locate(input, res.line, res.col ?? 1);
+    return [{ from: l.from!, to: l.to!, message: res.message }];
+  }, [res, debounced, input]);
   const fileName = (res.ok ? res.classes[0] : o.className || 'Request') + '.java';
   const set = (p: Partial<JavaOptions>) => setO(x => ({ ...x, ...p }));
   const chk = (k: keyof JavaOptions, label: string, disabled = false) => (
@@ -75,7 +81,7 @@ export default function JavaTab({ getViewerText }: { getViewerText: () => string
       <main className="split2">
         <section className="pane">
           <div className="panehead">JSON request</div>
-          <CodeEditor value={input} onChange={setInput} lang="json" testId="java-input" errorLine={!res.ok ? res.line ?? null : null} />
+          <CodeEditor value={input} onChange={setInput} lang="json" testId="java-input" diagnostics={javaDiag} />
           <div className={'status' + (res.ok ? '' : ' err')} data-testid="java-status">
             {res.ok ? `✔ ${res.classes.length} class${res.classes.length > 1 ? 'es' : ''}: ${res.classes.join(', ')}` : `✖ ${res.line ? `Line ${res.line}, Col ${res.col}: ` : ''}${res.message}${lastCode ? ' — showing last generated code' : ''}`}
           </div>

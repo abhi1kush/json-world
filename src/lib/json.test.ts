@@ -22,7 +22,7 @@ describe('parse/stringify', () => {
     expect(J.toJS(P('{"u":"\\u00e9","e":{},"a":[]}'))).toEqual({ u: 'é', e: {}, a: [] });
   });
   it.each([
-    ['{"a":1,}', 1, 8],
+    ['{"a":1,}', 1, 7], // points at the offending comma,
     ['{\n  "a": 1\n  "b": 2\n}', 3, 3],
     ['[1, 2', 1, 6],
     ['{a:1}', 1, 2],
